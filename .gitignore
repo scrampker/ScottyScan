@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+vendor/
+venv/
+__pycache__/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Scan results (may contain sensitive data)
+results/
+reports/
