@@ -58,7 +58,8 @@
     PSCredential for remote WMI/PSRemoting checks.
 
 .PARAMETER Ports
-    TCP ports to probe during discovery. Default: 22,80,135,443,445,3389
+    TCP ports to probe during discovery. Default: all (1-65535).
+    Use 'top100' for top 100 enterprise ports, or a comma-separated list.
 
 .EXAMPLE
     # Interactive - launches menu
@@ -108,12 +109,85 @@ param(
 #  GLOBALS
 # ============================================================
 $script:Version      = "1.0.0"
-$script:Build        = "2026-02-06"
+$script:Build        = (Get-Item $PSCommandPath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
 $script:ConfigFile   = Join-Path $PSScriptRoot "scottyscan.json"
 $script:Config       = $null
 $script:Validators   = [System.Collections.ArrayList]::new()
 $script:LogFile      = $null
 $script:Timestamp    = Get-Date -Format "yyyyMMdd_HHmmss"
+
+# Top ~100 TCP ports by frequency in enterprise networks.
+# Used when port mode is "top100" (quick scan alternative to full 1-65535).
+$script:TopPorts = @(
+    21, 22, 23, 25, 53, 80, 81, 88, 110, 111,
+    135, 139, 143, 179, 389, 443, 445, 464, 465, 514,
+    515, 523, 543, 548, 554, 587, 593, 623, 636, 873,
+    902, 993, 995, 1022, 1025, 1080, 1194, 1433, 1434, 1521,
+    1723, 2049, 2082, 2083, 2222, 2375, 2376, 3000, 3128, 3268,
+    3269, 3306, 3389, 3690, 4443, 4848, 5000, 5060, 5061, 5222,
+    5357, 5432, 5555, 5601, 5672, 5900, 5985, 5986, 6000, 6379,
+    6443, 6667, 7001, 7002, 7070, 7443, 8000, 8008, 8009, 8080,
+    8081, 8083, 8088, 8090, 8181, 8443, 8444, 8880, 8888, 9000,
+    9090, 9091, 9200, 9300, 9443, 9999, 10000, 11211, 27017, 50000
+)
+
+function Build-PortList {
+    <#
+    .SYNOPSIS
+        Resolves a port string into an int[] port list, merged with plugin ScanPorts.
+        "" or "all" = 1-65535. "top100" = TopPorts. Otherwise CSV of port numbers.
+    #>
+    param([string]$PortString, [array]$SelectedPlugins)
+    $portSet = @{}
+    if ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
+        1..65535 | ForEach-Object { $portSet[$_] = $true }
+    } elseif ($PortString -eq "top100") {
+        foreach ($p in $script:TopPorts) { $portSet[$p] = $true }
+    } else {
+        foreach ($tok in ($PortString -split ',')) {
+            $t = $tok.Trim()
+            if ($t -match '^\d+$' -and [int]$t -ge 1 -and [int]$t -le 65535) {
+                $portSet[[int]$t] = $true
+            }
+        }
+    }
+    foreach ($plugin in $SelectedPlugins) {
+        if ($plugin.ScanPorts -and $plugin.ScanPorts.Count -gt 0) {
+            foreach ($p in $plugin.ScanPorts) { $portSet[[int]$p] = $true }
+        }
+    }
+    # When scanning all ports, put well-known ports first for faster initial results
+    if ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
+        $prioritySet = @{}
+        foreach ($p in $script:TopPorts) { $prioritySet[$p] = $true }
+        foreach ($plugin in $SelectedPlugins) {
+            if ($plugin.ScanPorts -and $plugin.ScanPorts.Count -gt 0) {
+                foreach ($p in $plugin.ScanPorts) { $prioritySet[[int]$p] = $true }
+            }
+        }
+        $priority = @($prioritySet.Keys | Sort-Object)
+        $rest = @($portSet.Keys | Where-Object { -not $prioritySet.ContainsKey($_) } | Sort-Object)
+        return @($priority + $rest)
+    }
+    return @($portSet.Keys | Sort-Object)
+}
+
+function Get-PortDisplayString {
+    param([string]$PortString)
+    if ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
+        return "All ports (1-65535)"
+    } elseif ($PortString -eq "top100") {
+        return "Top 100 enterprise ports"
+    } else {
+        $ports = ($PortString -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' }
+        $count = $ports.Count
+        if ($count -le 10) {
+            return $PortString
+        } else {
+            return "$count custom ports"
+        }
+    }
+}
 
 $ErrorActionPreference = 'Continue'
 
@@ -125,11 +199,11 @@ function Write-Banner {
     $banner = @"
 
   ============================================
-   ___           _   _         ___
-  / __| __ ___  | |_| |_ _  _/ __| __ __ _ _ _
-  \__ \/ _/ _ \ |  _|  _| || \__ \/ _/ _' | ' \
-  |___/\__\___/  \__|\__|\_, |___/\__\__,_|_||_|
-                         |__/
+   ___          _   _         ___
+  / __| __ ___ | |_| |_ _  _/ __| __ __ _ _ _
+  \__ \/ _/ _ \|  _|  _| || \__ \/ _/ _' | ' \
+  |___/\__\___/\__|\__|\_, /|___/\__\__,_|_||_|
+                       |__/
   Environment Scanner & Validator  v$($script:Version)
   Build: $($script:Build)
   ============================================
@@ -145,17 +219,19 @@ function Write-Section {
 }
 
 function Write-Log {
-    param([string]$Message, [string]$Level = "INFO")
+    param([string]$Message, [string]$Level = "INFO", [switch]$Silent)
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$ts] [$Level] $Message"
-    $color = switch ($Level) {
-        "ERROR" { "Red" }
-        "WARN"  { "Yellow" }
-        "OK"    { "Green" }
-        "DEBUG" { "DarkGray" }
-        default { "Gray" }
+    if (-not $Silent) {
+        $color = switch ($Level) {
+            "ERROR" { "Red" }
+            "WARN"  { "Yellow" }
+            "OK"    { "Green" }
+            "DEBUG" { "DarkGray" }
+            default { "Gray" }
+        }
+        Write-Host "  $line" -ForegroundColor $color
     }
-    Write-Host "  $line" -ForegroundColor $color
     if ($script:LogFile) {
         $line | Out-File -Append -FilePath $script:LogFile -Encoding UTF8
     }
@@ -168,153 +244,747 @@ function Write-Status {
 }
 
 # ============================================================
-#  INTERACTIVE MENU SYSTEM
+#  INTERACTIVE MENU SYSTEM (TUI with arrow-key navigation)
 # ============================================================
 
-function Show-CheckboxMenu {
+function Test-IsConsoleHost {
     <#
     .SYNOPSIS
-        Displays an interactive checkbox menu. Returns array of selected items.
-    .PARAMETER Title
-        Menu title displayed above options.
-    .PARAMETER Items
-        Array of hashtables: @{ Name = "display"; Value = "returnValue"; Selected = $true/$false; Description = "optional" }
-    .PARAMETER AllowSelectAll
-        Show Select All / None toggle.
+        Returns $true if running in a real console (supports ReadKey), $false for ISE/etc.
+    #>
+    return ($host.Name -eq 'ConsoleHost')
+}
+
+# ---- Low-level TUI drawing primitives ----
+# These write directly to the console buffer at absolute row positions
+# using [Console]::SetCursorPosition + [Console]::Write to avoid
+# Write-Host's implicit newline which causes terminal scrolling.
+
+function script:Get-ConsoleWidth {
+    $w = 80
+    try {
+        $cw = [Console]::BufferWidth
+        if ($cw -gt 0) { $w = $cw }
+    } catch {
+        try {
+            $cw = $host.UI.RawUI.BufferSize.Width
+            if ($cw -gt 0) { $w = $cw }
+        } catch {}
+    }
+    return $w
+}
+
+function script:Get-ConsoleHeight {
+    $h = 25
+    try {
+        $ch = [Console]::WindowHeight
+        if ($ch -gt 0) { $h = $ch }
+    } catch {
+        try {
+            $ch = $host.UI.RawUI.WindowSize.Height
+            if ($ch -gt 0) { $h = $ch }
+        } catch {}
+    }
+    return $h
+}
+
+function script:Write-LineAt {
+    <#
+    .SYNOPSIS
+        Writes a string at an absolute row, padded to full width, with color.
+        Does NOT advance the cursor to a new line -- no scrolling.
+    #>
+    param(
+        [int]$Row,
+        [string]$Text,
+        [ConsoleColor]$Fg = [ConsoleColor]::Gray,
+        [ConsoleColor]$Bg = [ConsoleColor]::Black
+    )
+    $w = script:Get-ConsoleWidth
+    # Truncate if too long, pad if too short. Leave last column empty to
+    # prevent the console from wrapping/scrolling on the rightmost cell.
+    $maxLen = $w - 1
+    if ($Text.Length -gt $maxLen) { $Text = $Text.Substring(0, $maxLen) }
+    $padded = $Text.PadRight($maxLen)
+
+    [Console]::SetCursorPosition(0, $Row)
+    $oldFg = [Console]::ForegroundColor
+    $oldBg = [Console]::BackgroundColor
+    [Console]::ForegroundColor = $Fg
+    [Console]::BackgroundColor = $Bg
+    [Console]::Write($padded)
+    [Console]::ForegroundColor = $oldFg
+    [Console]::BackgroundColor = $oldBg
+}
+
+function script:Clear-Screen {
+    <#
+    .SYNOPSIS
+        Clears the entire visible console window by writing spaces to every row.
+    #>
+    $h = script:Get-ConsoleHeight
+    $w = script:Get-ConsoleWidth
+    $blank = " " * ($w - 1)
+    $oldFg = [Console]::ForegroundColor
+    $oldBg = [Console]::BackgroundColor
+    [Console]::ForegroundColor = [ConsoleColor]::Gray
+    [Console]::BackgroundColor = [ConsoleColor]::Black
+    for ($r = 0; $r -lt $h; $r++) {
+        [Console]::SetCursorPosition(0, $r)
+        [Console]::Write($blank)
+    }
+    [Console]::ForegroundColor = $oldFg
+    [Console]::BackgroundColor = $oldBg
+    [Console]::SetCursorPosition(0, 0)
+}
+
+function script:Draw-Banner {
+    <#
+    .SYNOPSIS
+        Draws the ScottyScan banner at the top of the screen (rows 0-7).
+        Returns the next available row after the banner.
+    #>
+    $lines = @(
+        ""
+        "  ============================================"
+        "   ___          _   _         ___"
+        "  / __| __ ___ | |_| |_ _  _/ __| __ __ _ _ _"
+        "  \__ \/ _/ _ \|  _|  _| || \__ \/ _/ _' | ' \"
+        "  |___/\__\___/\__|\__|\_, /|___/\__\__,_|_||_|"
+        "                       |__/"
+        "  Environment Scanner & Validator  v$($script:Version)"
+        "  Build: $($script:Build)"
+        "  ============================================"
+        ""
+    )
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        script:Write-LineAt -Row $i -Text $lines[$i] -Fg Cyan
+    }
+    return $lines.Count
+}
+
+# ---- Main TUI Menu Function ----
+
+function Show-InteractiveMenu {
+    <#
+    .SYNOPSIS
+        Full-screen keyboard-navigable TUI menu. Clears and takes over the terminal.
+        Returns array of selected Values, or $null if user pressed Escape.
     #>
     param(
         [string]$Title,
         [array]$Items,
+        [switch]$SingleSelect,
         [switch]$AllowSelectAll,
-        [switch]$SingleSelect
+        [switch]$IsRootMenu
     )
 
-    # Clone selection state
-    $selections = @()
+    # Clone selection state so we don't mutate caller's data
+    $selections = [System.Collections.ArrayList]::new()
     foreach ($item in $Items) {
-        $selections += @{
+        [void]$selections.Add(@{
             Name        = $item.Name
             Value       = $item.Value
             Selected    = [bool]$item.Selected
             Description = $item.Description
+            IsAction    = $false
+            Action      = $null
+        })
+    }
+
+    # For multi-select with AllowSelectAll, prepend ALL / NONE action buttons
+    # These are navigable rows that trigger select-all / select-none on Enter or Space
+    $actionCount = 0
+    if ($AllowSelectAll -and -not $SingleSelect) {
+        $selections.Insert(0, @{
+            Name = ">> Select NONE"; Value = $null; Selected = $false
+            Description = ""; IsAction = $true; Action = "None"
+        })
+        $selections.Insert(0, @{
+            Name = ">> Select ALL";  Value = $null; Selected = $false
+            Description = ""; IsAction = $true; Action = "All"
+        })
+        $actionCount = 2
+    }
+
+    # ---- ISE / non-console fallback ----
+    if (-not (Test-IsConsoleHost)) {
+        # Strip action rows for fallback -- it uses A/N keys instead
+        $fallbackSel = [System.Collections.ArrayList]::new()
+        foreach ($s in $selections) { if (-not $s.IsAction) { [void]$fallbackSel.Add($s) } }
+        return Show-FallbackMenu -Title $Title -Selections $fallbackSel `
+                                 -SingleSelect:$SingleSelect -AllowSelectAll:$AllowSelectAll
+    }
+
+    # ---- Console TUI ----
+    $cursor = 0  # default: land on ALL button (index 0) for multi-select
+    $itemCount = $selections.Count
+    if ($itemCount -eq 0) { return @() }
+
+    if ($SingleSelect) {
+        # Find first selected item as starting cursor position
+        for ($i = 0; $i -lt $itemCount; $i++) {
+            if ($selections[$i].Selected) { $cursor = $i; break }
         }
     }
 
-    $cursorPos = 0
+    $scrollOffset = 0
+    $prevCursorVisible = $true
+    try { $prevCursorVisible = [Console]::CursorVisible } catch {}
+    try { [Console]::CursorVisible = $false } catch {}
+
+    try {
+        # Full-screen takeover: clear and draw banner
+        script:Clear-Screen
+        $startRow = script:Draw-Banner
+
+        # Layout rows below the banner:
+        #   startRow+0 : title
+        #   startRow+1 : hints (normal)
+        #   startRow+2 : esc hint (separate so it can be red on root menu)
+        #   startRow+3 : blank separator
+        #   startRow+4 : scroll-up indicator
+        #   startRow+5 .. startRow+5+visibleCount-1 : items
+        #   after items : scroll-down indicator
+
+        $titleRow = $startRow
+        $hintRow  = $startRow + 1
+        $escRow   = $startRow + 2
+        $sepRow   = $startRow + 3
+        $scrollUpRow = $startRow + 4
+        $firstItemRow = $startRow + 5
+
+        # How many item rows fit on screen
+        $consoleH = script:Get-ConsoleHeight
+        $maxVisible = [Math]::Max(3, $consoleH - $firstItemRow - 2)  # -2 for scroll-down + footer
+        $visibleCount = [Math]::Min($itemCount, $maxVisible)
+
+        # Draw static parts (title, hints, separator) once
+        script:Write-LineAt -Row $titleRow -Text "  $Title" -Fg Yellow
+        if ($SingleSelect) {
+            $hintText = "  Up/Down=Move  Enter=Confirm"
+        } else {
+            $hintText = "  Up/Down=Move  Space=Toggle  Enter=Confirm"
+            if ($AllowSelectAll) { $hintText += "  A=All  N=None" }
+        }
+        script:Write-LineAt -Row $hintRow -Text $hintText -Fg DarkGray
+        if ($IsRootMenu) {
+            script:Write-LineAt -Row $escRow -Text "  Esc=Exit" -Fg Red
+        } else {
+            script:Write-LineAt -Row $escRow -Text "  Esc=Back" -Fg DarkGray
+        }
+        script:Write-LineAt -Row $sepRow -Text ""
+
+        # Track what was last drawn per item row to skip unchanged lines
+        $lastDrawn = @{}
+
+        while ($true) {
+            # Adjust scroll offset to keep cursor visible
+            if ($cursor -lt $scrollOffset) { $scrollOffset = $cursor }
+            if ($cursor -ge ($scrollOffset + $visibleCount)) {
+                $scrollOffset = $cursor - $visibleCount + 1
+            }
+
+            # Scroll-up indicator
+            if ($scrollOffset -gt 0) {
+                script:Write-LineAt -Row $scrollUpRow -Text "    -- $scrollOffset more above --" -Fg DarkGray
+            } else {
+                script:Write-LineAt -Row $scrollUpRow -Text ""
+            }
+
+            # Draw visible items (only redraw changed lines)
+            for ($vi = 0; $vi -lt $visibleCount; $vi++) {
+                $idx = $scrollOffset + $vi
+                $sel = $selections[$idx]
+                $isCursor = ($idx -eq $cursor)
+                $row = $firstItemRow + $vi
+
+                if ($sel.IsAction) {
+                    # Action button row (ALL / NONE) -- no checkbox marker
+                    $lineText = "    $($sel.Name)"
+                    if ($isCursor) {
+                        $fg = [ConsoleColor]::Black
+                        $bg = [ConsoleColor]::DarkCyan
+                    } else {
+                        $fg = [ConsoleColor]::Cyan
+                        $bg = [ConsoleColor]::Black
+                    }
+                } else {
+                    if ($SingleSelect) {
+                        $marker = if ($sel.Selected) { "(*)" } else { "( )" }
+                    } else {
+                        $marker = if ($sel.Selected) { "[X]" } else { "[ ]" }
+                    }
+                    $descStr = ""
+                    if ($sel.Description) { $descStr = " - $($sel.Description)" }
+                    $lineText = "    $marker $($sel.Name)$descStr"
+
+                    if ($isCursor) {
+                        $fg = [ConsoleColor]::Black
+                        $bg = [ConsoleColor]::DarkCyan
+                    } elseif ($sel.Selected) {
+                        $fg = [ConsoleColor]::Green
+                        $bg = [ConsoleColor]::Black
+                    } else {
+                        $fg = [ConsoleColor]::Gray
+                        $bg = [ConsoleColor]::Black
+                    }
+                }
+
+                # Build a draw-key to detect changes
+                $drawKey = "$lineText|$fg|$bg"
+                if ($lastDrawn[$vi] -ne $drawKey) {
+                    script:Write-LineAt -Row $row -Text $lineText -Fg $fg -Bg $bg
+                    $lastDrawn[$vi] = $drawKey
+                }
+            }
+
+            # Clear any extra rows if visibleCount is less than maxVisible
+            for ($vi = $visibleCount; $vi -lt $maxVisible; $vi++) {
+                $row = $firstItemRow + $vi
+                if ($lastDrawn[$vi]) {
+                    script:Write-LineAt -Row $row -Text ""
+                    $lastDrawn[$vi] = $null
+                }
+            }
+
+            # Scroll-down indicator
+            $scrollDownRow = $firstItemRow + $visibleCount
+            $remaining = $itemCount - ($scrollOffset + $visibleCount)
+            if ($remaining -gt 0) {
+                script:Write-LineAt -Row $scrollDownRow -Text "    -- $remaining more below --" -Fg DarkGray
+            } else {
+                script:Write-LineAt -Row $scrollDownRow -Text ""
+            }
+
+            # Park cursor off-screen (bottom-left) so it doesn't blink in the menu
+            [Console]::SetCursorPosition(0, $consoleH - 1)
+
+            # -- Read key --
+            $key = [Console]::ReadKey($true)
+
+            # Check if cursor is on an action button
+            $onAction = ($cursor -lt $actionCount -and $selections[$cursor].IsAction)
+
+            switch ($key.Key) {
+                'UpArrow' {
+                    $cursor--
+                    if ($cursor -lt 0) { $cursor = $itemCount - 1 }
+                    if ($SingleSelect) {
+                        foreach ($s in $selections) { $s.Selected = $false }
+                        $selections[$cursor].Selected = $true
+                    }
+                    $lastDrawn = @{}
+                }
+                'DownArrow' {
+                    $cursor++
+                    if ($cursor -ge $itemCount) { $cursor = 0 }
+                    if ($SingleSelect) {
+                        foreach ($s in $selections) { $s.Selected = $false }
+                        $selections[$cursor].Selected = $true
+                    }
+                    $lastDrawn = @{}
+                }
+                'Spacebar' {
+                    if ($onAction) {
+                        # Trigger action button
+                        $act = $selections[$cursor].Action
+                        if ($act -eq "All")  { foreach ($s in $selections) { if (-not $s.IsAction) { $s.Selected = $true } } }
+                        if ($act -eq "None") { foreach ($s in $selections) { if (-not $s.IsAction) { $s.Selected = $false } } }
+                    } elseif ($SingleSelect) {
+                        foreach ($s in $selections) { $s.Selected = $false }
+                        $selections[$cursor].Selected = $true
+                    } else {
+                        $selections[$cursor].Selected = -not $selections[$cursor].Selected
+                    }
+                    $lastDrawn = @{}
+                }
+                'Enter' {
+                    if ($onAction) {
+                        # Trigger action button then confirm
+                        $act = $selections[$cursor].Action
+                        if ($act -eq "All")  { foreach ($s in $selections) { if (-not $s.IsAction) { $s.Selected = $true } } }
+                        if ($act -eq "None") { foreach ($s in $selections) { if (-not $s.IsAction) { $s.Selected = $false } } }
+                    } elseif ($SingleSelect) {
+                        foreach ($s in $selections) { $s.Selected = $false }
+                        $selections[$cursor].Selected = $true
+                    }
+                    return @($selections | Where-Object { $_.Selected -and -not $_.IsAction } |
+                             ForEach-Object { $_.Value })
+                }
+                'Escape' {
+                    return $null
+                }
+                default {
+                    $ch = [char]::ToUpper($key.KeyChar)
+                    if ($ch -eq 'A' -and $AllowSelectAll -and -not $SingleSelect) {
+                        foreach ($s in $selections) { if (-not $s.IsAction) { $s.Selected = $true } }
+                        $lastDrawn = @{}
+                    }
+                    elseif ($ch -eq 'N' -and $AllowSelectAll -and -not $SingleSelect) {
+                        foreach ($s in $selections) { if (-not $s.IsAction) { $s.Selected = $false } }
+                        $lastDrawn = @{}
+                    }
+                }
+            }
+        }
+    } finally {
+        try { [Console]::CursorVisible = $prevCursorVisible } catch {}
+    }
+}
+
+function Show-FallbackMenu {
+    <#
+    .SYNOPSIS
+        Read-Host based fallback for non-console hosts (ISE, etc.).
+        Returns array of selected Values, or $null on empty input with SingleSelect.
+    #>
+    param(
+        [string]$Title,
+        [System.Collections.ArrayList]$Selections,
+        [switch]$SingleSelect,
+        [switch]$AllowSelectAll
+    )
 
     while ($true) {
-        # Render
         Write-Host ""
         Write-Host "  $Title" -ForegroundColor Yellow
         if ($SingleSelect) {
-            Write-Host "  (Use number keys to select, Enter to confirm)" -ForegroundColor DarkGray
+            Write-Host "  (Type a number to select, Enter to confirm)" -ForegroundColor DarkGray
         } else {
-            Write-Host "  (Toggle: number key | A=All | N=None | Enter=Confirm)" -ForegroundColor DarkGray
+            Write-Host "  (Toggle: number | A=All | N=None | Enter=Confirm)" -ForegroundColor DarkGray
         }
         Write-Host ""
 
-        for ($i = 0; $i -lt $selections.Count; $i++) {
-            $sel = $selections[$i]
-            $marker = if ($sel.Selected) { "[X]" } else { "[ ]" }
-            $num = $i + 1
-            $nameStr = $sel.Name
-            $descStr = if ($sel.Description) { " - $($sel.Description)" } else { "" }
-
-            Write-Host "    " -NoNewline
-            if ($sel.Selected) {
-                Write-Host ("{0} {1}" -f $marker, "$num.") -NoNewline -ForegroundColor Green
+        for ($i = 0; $i -lt $Selections.Count; $i++) {
+            $sel = $Selections[$i]
+            if ($SingleSelect) {
+                $marker = if ($sel.Selected) { "(*)" } else { "( )" }
             } else {
-                Write-Host ("{0} {1}" -f $marker, "$num.") -NoNewline -ForegroundColor DarkGray
+                $marker = if ($sel.Selected) { "[X]" } else { "[ ]" }
             }
-            Write-Host (" {0}" -f $nameStr) -NoNewline -ForegroundColor White
-            Write-Host $descStr -ForegroundColor DarkGray
+            $descStr = ""
+            if ($sel.Description) { $descStr = " - $($sel.Description)" }
+
+            if ($sel.Selected) {
+                Write-Host ("    $marker {0}. {1}{2}" -f ($i+1), $sel.Name, $descStr) -ForegroundColor Green
+            } else {
+                Write-Host ("    $marker {0}. {1}{2}" -f ($i+1), $sel.Name, $descStr) -ForegroundColor Gray
+            }
         }
 
         Write-Host ""
-        $prompt = if ($SingleSelect) { "  Choice" } else { "  Toggle (#), A=All, N=None, Enter=Done" }
-        $input = Read-Host $prompt
+        $response = Read-Host "  Selection"
 
-        if ([string]::IsNullOrWhiteSpace($input)) {
-            # Confirm
-            break
+        if ([string]::IsNullOrWhiteSpace($response)) {
+            return @($Selections | Where-Object { $_.Selected } | ForEach-Object { $_.Value })
         }
 
-        $inputUpper = $input.Trim().ToUpper()
+        $responseUpper = $response.Trim().ToUpper()
 
-        if ($inputUpper -eq 'A' -and $AllowSelectAll -and -not $SingleSelect) {
-            foreach ($s in $selections) { $s.Selected = $true }
+        if ($responseUpper -eq 'A' -and $AllowSelectAll -and -not $SingleSelect) {
+            foreach ($s in $Selections) { $s.Selected = $true }
+            continue
+        }
+        if ($responseUpper -eq 'N' -and $AllowSelectAll -and -not $SingleSelect) {
+            foreach ($s in $Selections) { $s.Selected = $false }
             continue
         }
 
-        if ($inputUpper -eq 'N' -and $AllowSelectAll -and -not $SingleSelect) {
-            foreach ($s in $selections) { $s.Selected = $false }
-            continue
-        }
-
-        # Try numeric toggle
-        $nums = $inputUpper -split '[,\s]+' | Where-Object { $_ -match '^\d+$' }
+        $nums = $responseUpper -split '[,\s]+' | Where-Object { $_ -match '^\d+$' }
         foreach ($n in $nums) {
             $idx = [int]$n - 1
-            if ($idx -ge 0 -and $idx -lt $selections.Count) {
+            if ($idx -ge 0 -and $idx -lt $Selections.Count) {
                 if ($SingleSelect) {
-                    # Deselect all, select this one
-                    foreach ($s in $selections) { $s.Selected = $false }
-                    $selections[$idx].Selected = $true
+                    foreach ($s in $Selections) { $s.Selected = $false }
+                    $Selections[$idx].Selected = $true
                 } else {
-                    $selections[$idx].Selected = -not $selections[$idx].Selected
+                    $Selections[$idx].Selected = -not $Selections[$idx].Selected
                 }
             }
         }
     }
-
-    return ($selections | Where-Object { $_.Selected } | ForEach-Object { $_.Value })
 }
 
 function Show-FilePrompt {
     <#
     .SYNOPSIS
-        Prompts for a file path with optional GUI file picker and last-used memory.
+        Two-panel TUI input selector. Main panel shows recent history (up to 5),
+        Left arrow opens action panel (Browse / Type path). Returns path or $null.
     #>
     param(
-        [string]$Prompt,
-        [string]$LastPath,
+        [string]$Title,
+        [string[]]$History = @(),
         [string]$Filter = "All files (*.*)|*.*",
+        [string]$TypePrompt = "Type the full file path:",
         [switch]$MustExist
     )
 
-    $displayLast = ""
-    if ($LastPath) {
-        $displayLast = " [last: $LastPath]"
+    # ---- ISE / non-console fallback ----
+    if (-not (Test-IsConsoleHost)) {
+        $lastPath = if ($History.Count -gt 0) { $History[0] } else { "" }
+        $displayLast = if ($lastPath) { " [last: $lastPath]" } else { "" }
+        while ($true) {
+            Write-Host ""
+            Write-Host "  $Title$displayLast" -ForegroundColor Yellow
+            Write-Host "  (Type path, 'browse' for file picker, Enter for last used, empty to go back)" -ForegroundColor DarkGray
+            $response = Read-Host "  Path"
+            if ([string]::IsNullOrWhiteSpace($response) -and $lastPath) {
+                if (-not $MustExist -or (Test-Path $lastPath)) { return $lastPath }
+                Write-Host "  File not found: $lastPath" -ForegroundColor Red
+                continue
+            }
+            if ([string]::IsNullOrWhiteSpace($response)) { return $null }
+            if ($response.Trim().ToLower() -eq 'browse') {
+                $picked = Show-FilePicker -Filter $Filter -LastFolder (Split-Path $lastPath -Parent -ErrorAction SilentlyContinue)
+                if ($picked) { return $picked }
+                Write-Host "  No file selected." -ForegroundColor Yellow
+                continue
+            }
+            $resolved = $response.Trim().Trim('"').Trim("'")
+            if ($MustExist -and -not (Test-Path $resolved)) {
+                Write-Host "  File not found: $resolved" -ForegroundColor Red
+                continue
+            }
+            return $resolved
+        }
     }
 
-    while ($true) {
-        Write-Host ""
-        Write-Host "  $Prompt$displayLast" -ForegroundColor Yellow
-        Write-Host "  (Type path, 'browse' for file picker, or Enter for last used)" -ForegroundColor DarkGray
-        $response = Read-Host "  Path"
+    # ---- Console TUI ----
+    $panel = "files"       # "files" or "actions"
+    $fileCursor = 0
+    $actionCursor = 0
+    $actions = @("Browse for file...", "Type manually...")
+    $errorMsg = ""
 
-        if ([string]::IsNullOrWhiteSpace($response) -and $LastPath) {
-            if (-not $MustExist -or (Test-Path $LastPath)) {
-                return $LastPath
+    # If no history, start on actions panel
+    if ($History.Count -eq 0) { $panel = "actions" }
+
+    $prevCursorVisible = $true
+    try { $prevCursorVisible = [Console]::CursorVisible } catch {}
+    try { [Console]::CursorVisible = $false } catch {}
+
+    try {
+        script:Clear-Screen
+        $startRow = script:Draw-Banner
+        $consoleH = script:Get-ConsoleHeight
+        $lastDrawn = @{}
+
+        while ($true) {
+            $r = $startRow
+
+            # Title
+            script:Write-LineAt -Row $r -Text "  $Title" -Fg Yellow; $r++
+            script:Write-LineAt -Row $r -Text ""; $r++
+
+            if ($panel -eq "files") {
+                # ---- File history panel ----
+                if ($History.Count -eq 0) {
+                    $drawKey = "empty"
+                    if ($lastDrawn[$r] -ne $drawKey) {
+                        script:Write-LineAt -Row $r -Text "    (no recent entries)" -Fg DarkGray
+                        $lastDrawn[$r] = $drawKey
+                    }
+                    $r++
+                } else {
+                    $w = script:Get-ConsoleWidth
+                    for ($i = 0; $i -lt $History.Count; $i++) {
+                        $isCursor = ($i -eq $fileCursor)
+                        $prefix = if ($isCursor) { "  > " } else { "    " }
+                        $path = $History[$i]
+                        $maxPathLen = $w - 8
+                        if ($path.Length -gt $maxPathLen) {
+                            $path = "..." + $path.Substring($path.Length - $maxPathLen + 3)
+                        }
+                        $lineText = "$prefix$path"
+                        if ($isCursor) {
+                            $fg = [ConsoleColor]::Black; $bg = [ConsoleColor]::DarkCyan
+                        } else {
+                            $fg = [ConsoleColor]::Gray; $bg = [ConsoleColor]::Black
+                        }
+                        $drawKey = "$lineText|$fg|$bg"
+                        if ($lastDrawn[$r] -ne $drawKey) {
+                            script:Write-LineAt -Row $r -Text $lineText -Fg $fg -Bg $bg
+                            $lastDrawn[$r] = $drawKey
+                        }
+                        $r++
+                    }
+                }
+
+                # Error message row
+                $r++
+                $errKey = "err:$errorMsg"
+                if ($lastDrawn[$r] -ne $errKey) {
+                    if ($errorMsg) {
+                        script:Write-LineAt -Row $r -Text "  $errorMsg" -Fg Red
+                    } else {
+                        script:Write-LineAt -Row $r -Text ""
+                    }
+                    $lastDrawn[$r] = $errKey
+                }
+                $r++
+
+                # Hint lines
+                $hintText = "  Up/Down=Navigate  Enter=Select  Left=More options  Esc=Back"
+                $hintKey = "hint:$hintText"
+                if ($lastDrawn[$r] -ne $hintKey) {
+                    script:Write-LineAt -Row $r -Text $hintText -Fg DarkGray
+                    $lastDrawn[$r] = $hintKey
+                }
+
+            } else {
+                # ---- Action panel ----
+                for ($i = 0; $i -lt $actions.Count; $i++) {
+                    $isCursor = ($i -eq $actionCursor)
+                    $prefix = if ($isCursor) { "  > " } else { "    " }
+                    $lineText = "$prefix>> $($actions[$i])"
+                    if ($isCursor) {
+                        $fg = [ConsoleColor]::Black; $bg = [ConsoleColor]::DarkCyan
+                    } else {
+                        $fg = [ConsoleColor]::Cyan; $bg = [ConsoleColor]::Black
+                    }
+                    $drawKey = "$lineText|$fg|$bg"
+                    if ($lastDrawn[$r] -ne $drawKey) {
+                        script:Write-LineAt -Row $r -Text $lineText -Fg $fg -Bg $bg
+                        $lastDrawn[$r] = $drawKey
+                    }
+                    $r++
+                }
+
+                # Error message row
+                $r++
+                $errKey = "err:$errorMsg"
+                if ($lastDrawn[$r] -ne $errKey) {
+                    if ($errorMsg) {
+                        script:Write-LineAt -Row $r -Text "  $errorMsg" -Fg Red
+                    } else {
+                        script:Write-LineAt -Row $r -Text ""
+                    }
+                    $lastDrawn[$r] = $errKey
+                }
+                $r++
+
+                # Hint lines
+                $backText = if ($History.Count -gt 0) { "Right=Back to list  " } else { "" }
+                $hintText = "  Up/Down=Navigate  Enter=Select  ${backText}Esc=Back"
+                $hintKey = "hint:$hintText"
+                if ($lastDrawn[$r] -ne $hintKey) {
+                    script:Write-LineAt -Row $r -Text $hintText -Fg DarkGray
+                    $lastDrawn[$r] = $hintKey
+                }
             }
-            Write-Host "  Last path no longer exists: $LastPath" -ForegroundColor Red
-            continue
-        }
 
-        if ($response.Trim().ToLower() -eq 'browse') {
-            $picked = Show-FilePicker -Filter $Filter -LastFolder (Split-Path $LastPath -Parent -ErrorAction SilentlyContinue)
-            if ($picked) { return $picked }
-            Write-Host "  No file selected." -ForegroundColor Yellow
-            continue
-        }
+            # Clear remaining rows below current content
+            $clearStart = $r + 1
+            for ($cr = $clearStart; $cr -lt $consoleH - 1; $cr++) {
+                if ($lastDrawn[$cr]) {
+                    script:Write-LineAt -Row $cr -Text ""
+                    $lastDrawn[$cr] = $null
+                }
+            }
 
-        $resolved = $response.Trim().Trim('"').Trim("'")
-        if ($MustExist -and -not (Test-Path $resolved)) {
-            Write-Host "  File not found: $resolved" -ForegroundColor Red
-            continue
-        }
+            # Park cursor
+            [Console]::SetCursorPosition(0, $consoleH - 1)
+            $errorMsg = ""
 
-        return $resolved
+            # ---- Read key ----
+            $key = [Console]::ReadKey($true)
+
+            switch ($key.Key) {
+                'UpArrow' {
+                    if ($panel -eq "files" -and $History.Count -gt 0) {
+                        $fileCursor = ($fileCursor - 1 + $History.Count) % $History.Count
+                    } elseif ($panel -eq "actions") {
+                        $actionCursor = ($actionCursor - 1 + $actions.Count) % $actions.Count
+                    }
+                    $lastDrawn = @{}
+                }
+                'DownArrow' {
+                    if ($panel -eq "files" -and $History.Count -gt 0) {
+                        $fileCursor = ($fileCursor + 1) % $History.Count
+                    } elseif ($panel -eq "actions") {
+                        $actionCursor = ($actionCursor + 1) % $actions.Count
+                    }
+                    $lastDrawn = @{}
+                }
+                'LeftArrow' {
+                    if ($panel -eq "files") {
+                        $panel = "actions"
+                        $actionCursor = 0
+                        $lastDrawn = @{}
+                    }
+                }
+                'RightArrow' {
+                    if ($panel -eq "actions" -and $History.Count -gt 0) {
+                        $panel = "files"
+                        $lastDrawn = @{}
+                    }
+                }
+                'Enter' {
+                    if ($panel -eq "files" -and $History.Count -gt 0) {
+                        $selected = $History[$fileCursor]
+                        if ($MustExist -and -not (Test-Path $selected)) {
+                            $errorMsg = "File not found: $selected"
+                        } else {
+                            return $selected
+                        }
+                    } elseif ($panel -eq "actions") {
+                        switch ($actionCursor) {
+                            0 {
+                                # Browse for file
+                                try { [Console]::CursorVisible = $true } catch {}
+                                $lastFolder = if ($History.Count -gt 0) {
+                                    Split-Path $History[0] -Parent -ErrorAction SilentlyContinue
+                                } else { $null }
+                                $picked = Show-FilePicker -Filter $Filter -LastFolder $lastFolder
+                                try { [Console]::CursorVisible = $false } catch {}
+                                if ($picked) {
+                                    if ($MustExist -and -not (Test-Path $picked)) {
+                                        $errorMsg = "File not found: $picked"
+                                    } else {
+                                        return $picked
+                                    }
+                                } else {
+                                    $errorMsg = "No file selected."
+                                }
+                                # Force full redraw after dialog
+                                script:Clear-Screen
+                                $startRow = script:Draw-Banner
+                                $lastDrawn = @{}
+                            }
+                            1 {
+                                # Type path manually
+                                script:Clear-Screen
+                                $startRow2 = script:Draw-Banner
+                                script:Write-LineAt -Row $startRow2 -Text "  $TypePrompt" -Fg Yellow
+                                script:Write-LineAt -Row ($startRow2 + 1) -Text "  (empty to go back)" -Fg DarkGray
+                                [Console]::SetCursorPosition(0, $startRow2 + 3)
+                                try { [Console]::CursorVisible = $true } catch {}
+                                $typed = Read-Host "  Path"
+                                try { [Console]::CursorVisible = $false } catch {}
+                                if (-not [string]::IsNullOrWhiteSpace($typed)) {
+                                    $resolved = $typed.Trim().Trim('"').Trim("'")
+                                    if ($MustExist -and -not (Test-Path $resolved)) {
+                                        $errorMsg = "File not found: $resolved"
+                                    } else {
+                                        return $resolved
+                                    }
+                                }
+                                # Force full redraw
+                                script:Clear-Screen
+                                $startRow = script:Draw-Banner
+                                $lastDrawn = @{}
+                            }
+                        }
+                    }
+                }
+                'Escape' {
+                    return $null
+                }
+            }
+        }
+    } finally {
+        try { [Console]::CursorVisible = $prevCursorVisible } catch {}
     }
 }
 
@@ -333,31 +1003,255 @@ function Show-FilePicker {
             return $dialog.FileName
         }
     } catch {
-        Write-Host "  (GUI file picker unavailable in this session)" -ForegroundColor DarkGray
+        if (Test-IsConsoleHost) {
+            # Will be shown by caller
+        } else {
+            Write-Host "  (GUI file picker unavailable in this session)" -ForegroundColor DarkGray
+        }
     }
     return $null
 }
 
 function Show-TextPrompt {
+    <#
+    .SYNOPSIS
+        Full-screen text prompt. Draws on the TUI layout.
+    #>
     param(
         [string]$Prompt,
         [string]$Default,
         [string]$LastValue
     )
+
+    $isConsole = Test-IsConsoleHost
+
     $displayDefault = ""
     if ($LastValue) {
         $displayDefault = " [last: $LastValue]"
     } elseif ($Default) {
         $displayDefault = " [default: $Default]"
     }
-    Write-Host ""
-    Write-Host "  $Prompt$displayDefault" -ForegroundColor Yellow
+
+    if ($isConsole) {
+        script:Clear-Screen
+        $startRow = script:Draw-Banner
+        script:Write-LineAt -Row $startRow -Text "  $Prompt$displayDefault" -Fg Yellow
+        script:Write-LineAt -Row ($startRow + 1) -Text ""
+        [Console]::SetCursorPosition(0, $startRow + 2)
+        try { [Console]::CursorVisible = $true } catch {}
+    } else {
+        Write-Host ""
+        Write-Host "  $Prompt$displayDefault" -ForegroundColor Yellow
+    }
+
     $response = Read-Host "  Value"
     if ([string]::IsNullOrWhiteSpace($response)) {
         if ($LastValue) { return $LastValue }
         return $Default
     }
     return $response.Trim()
+}
+
+function Show-SettingsMenu {
+    <#
+    .SYNOPSIS
+        Interactive settings for threads, timeout, and ports.
+        Returns hashtable @{ Threads; Timeout; Ports } or $null on Escape.
+    #>
+    param(
+        [int]$CurrentThreads,
+        [int]$CurrentTimeout,
+        [string]$CurrentPorts
+    )
+
+    $portsDisplay = Get-PortDisplayString $CurrentPorts
+
+    $settingsItems = @(
+        @{ Name = "Max threads: $CurrentThreads";    Value = "Threads"; Selected = $false; Description = "Parallel scan threads" }
+        @{ Name = "Timeout (ms): $CurrentTimeout";   Value = "Timeout"; Selected = $false; Description = "Per-test network timeout" }
+        @{ Name = "Discovery ports: $portsDisplay";   Value = "Ports";   Selected = $false; Description = "TCP ports for host discovery" }
+        @{ Name = ">> Continue with current settings"; Value = "Done";   Selected = $true;  Description = "" }
+    )
+
+    while ($true) {
+        $portsDisplay = Get-PortDisplayString $CurrentPorts
+        $settingsItems[0].Name = "Max threads: $CurrentThreads"
+        $settingsItems[1].Name = "Timeout (ms): $CurrentTimeout"
+        $settingsItems[2].Name = "Discovery ports: $portsDisplay"
+
+        $choice = Show-InteractiveMenu -Title "Settings (select to change, or continue):" `
+                                       -Items $settingsItems -SingleSelect
+
+        if ($null -eq $choice) { return $null }
+
+        $picked = $choice | Select-Object -First 1
+
+        switch ($picked) {
+            "Threads" {
+                $val = Show-TextPrompt -Prompt "Max parallel threads:" -Default "$CurrentThreads"
+                if ($val -match '^\d+$' -and [int]$val -gt 0) { $CurrentThreads = [int]$val }
+            }
+            "Timeout" {
+                $val = Show-TextPrompt -Prompt "Timeout per test (ms):" -Default "$CurrentTimeout"
+                if ($val -match '^\d+$' -and [int]$val -gt 0) { $CurrentTimeout = [int]$val }
+            }
+            "Ports" {
+                $portOptions = @(
+                    @{ Name = "All ports (1-65535)";      Value = "all";    Selected = ([string]::IsNullOrWhiteSpace($CurrentPorts) -or $CurrentPorts -eq "all"); Description = "Full TCP port scan" }
+                    @{ Name = "Top 100 enterprise ports"; Value = "top100"; Selected = ($CurrentPorts -eq "top100"); Description = "Common enterprise services" }
+                    @{ Name = "Custom port list";         Value = "custom"; Selected = ($CurrentPorts -ne "" -and $CurrentPorts -ne "all" -and $CurrentPorts -ne "top100"); Description = "Specify individual ports" }
+                )
+                $portChoice = Show-InteractiveMenu -Title "Discovery port range:" -Items $portOptions -SingleSelect
+                if ($null -ne $portChoice) {
+                    $portPicked = $portChoice | Select-Object -First 1
+                    switch ($portPicked) {
+                        "all"    { $CurrentPorts = "" }
+                        "top100" { $CurrentPorts = "top100" }
+                        "custom" {
+                            $existing = if ($CurrentPorts -and $CurrentPorts -ne "all" -and $CurrentPorts -ne "top100") { $CurrentPorts } else { "22,80,443,3389" }
+                            $val = Show-TextPrompt -Prompt "TCP ports (comma-separated):" -Default $existing
+                            if ($val) { $CurrentPorts = $val }
+                        }
+                    }
+                }
+            }
+            "Done" {
+                return @{
+                    Threads = $CurrentThreads
+                    Timeout = $CurrentTimeout
+                    Ports   = $CurrentPorts
+                }
+            }
+        }
+    }
+}
+
+function Show-ConfirmationScreen {
+    <#
+    .SYNOPSIS
+        Full-screen summary of all selections. Returns $true on Enter, $false on Escape.
+    #>
+    param(
+        [string]$Mode,
+        [string[]]$PluginNames,
+        [string[]]$OutputNames,
+        [int]$Threads,
+        [int]$Timeout,
+        [string]$Ports,
+        [string]$InputDetail
+    )
+
+    $portsDisplay = Get-PortDisplayString $Ports
+
+    if (-not (Test-IsConsoleHost)) {
+        Write-Host ""
+        Write-Host "  ==========================================" -ForegroundColor Yellow
+        Write-Host "  READY TO EXECUTE" -ForegroundColor Yellow
+        Write-Host "  ==========================================" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  Mode:      $Mode" -ForegroundColor White
+        Write-Host "  Plugins:   $($PluginNames -join ', ')" -ForegroundColor White
+        Write-Host "  Outputs:   $($OutputNames -join ', ')" -ForegroundColor White
+        Write-Host "  Threads:   $Threads" -ForegroundColor White
+        Write-Host "  Timeout:   ${Timeout}ms" -ForegroundColor White
+        Write-Host "  Ports:     $portsDisplay" -ForegroundColor White
+        Write-Host "  Input:     $InputDetail" -ForegroundColor White
+        Write-Host ""
+        $response = Read-Host "  Press Enter to execute, or type 'back' to go back"
+        return ($response.Trim().ToLower() -ne 'back')
+    }
+
+    $prevCursorVisible = $true
+    try { $prevCursorVisible = [Console]::CursorVisible } catch {}
+    try { [Console]::CursorVisible = $false } catch {}
+
+    try {
+        script:Clear-Screen
+        $startRow = script:Draw-Banner
+
+        $r = $startRow
+        script:Write-LineAt -Row $r -Text "  ==========================================" -Fg Yellow; $r++
+        script:Write-LineAt -Row $r -Text "  READY TO EXECUTE" -Fg Yellow; $r++
+        script:Write-LineAt -Row $r -Text "  ==========================================" -Fg Yellow; $r++
+        script:Write-LineAt -Row $r -Text ""; $r++
+        script:Write-LineAt -Row $r -Text "  Mode:      $Mode" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text "  Plugins:   $($PluginNames -join ', ')" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text "  Outputs:   $($OutputNames -join ', ')" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text "  Threads:   $Threads" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text "  Timeout:   ${Timeout}ms" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text "  Ports:     $portsDisplay" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text "  Input:     $InputDetail" -Fg White; $r++
+        script:Write-LineAt -Row $r -Text ""; $r++
+        script:Write-LineAt -Row $r -Text "  Enter=Execute  Esc=Back" -Fg DarkGray; $r++
+
+        $consoleH = script:Get-ConsoleHeight
+        [Console]::SetCursorPosition(0, $consoleH - 1)
+
+        while ($true) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq 'Enter') { return $true }
+            if ($key.Key -eq 'Escape') { return $false }
+        }
+    } finally {
+        try { [Console]::CursorVisible = $prevCursorVisible } catch {}
+    }
+}
+
+function Get-ModeInput {
+    <#
+    .SYNOPSIS
+        Gathers mode-specific input (CIDRs, host file, or CSV path).
+        Uses two-panel TUI with history. Returns hashtable or $null on Escape.
+    #>
+    param(
+        [string]$Mode,
+        [PSCustomObject]$Config
+    )
+
+    switch ($Mode) {
+        "Scan" {
+            $history = Get-InputHistory -HistoryKey "CIDRInputHistory" -LegacyKey "LastCIDRs"
+            # Also check LastCIDRFile as legacy fallback
+            if ($history.Count -eq 0 -and $Config.PSObject.Properties.Name -contains 'LastCIDRFile' -and $Config.LastCIDRFile) {
+                $history = @($Config.LastCIDRFile)
+            }
+            $cidrResponse = Show-FilePrompt -Title "Enter CIDRs or select a CIDR file:" `
+                                            -History $history `
+                                            -Filter "Text files (*.txt)|*.txt|All files (*.*)|*.*" `
+                                            -TypePrompt "Type CIDRs (comma-separated) or a file path:"
+            if ([string]::IsNullOrWhiteSpace($cidrResponse)) { return $null }
+
+            $cidrList = @()
+            if (Test-Path $cidrResponse -ErrorAction SilentlyContinue) {
+                $cidrList = Get-Content $cidrResponse | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }
+                return @{ CIDRList = $cidrList; CIDRFile = $cidrResponse; CIDRs = ""; RawInput = $cidrResponse }
+            } else {
+                $cidrList = $cidrResponse -split ',' | ForEach-Object { $_.Trim() }
+                return @{ CIDRList = $cidrList; CIDRFile = ""; CIDRs = ($cidrList -join ', '); RawInput = $cidrResponse }
+            }
+        }
+        "List" {
+            $history = Get-InputHistory -HistoryKey "HostFileHistory" -LegacyKey "LastHostFile"
+            $hostFile = Show-FilePrompt -Title "Host list file (one IP/hostname per line):" `
+                                        -History $history `
+                                        -Filter "Text files (*.txt)|*.txt|All files (*.*)|*.*" `
+                                        -TypePrompt "Type the full file path:" `
+                                        -MustExist
+            if (-not $hostFile) { return $null }
+            return @{ HostFile = $hostFile }
+        }
+        "Validate" {
+            $history = Get-InputHistory -HistoryKey "InputCSVHistory" -LegacyKey "LastInputCSV"
+            $csvPath = Show-FilePrompt -Title "OpenVAS CSV file:" `
+                                       -History $history `
+                                       -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" `
+                                       -TypePrompt "Type the full CSV file path:" `
+                                       -MustExist
+            if (-not $csvPath) { return $null }
+            return @{ CSVPath = $csvPath }
+        }
+    }
+    return $null
 }
 
 # ============================================================
@@ -381,11 +1275,14 @@ function Load-Config {
         LastHostFile     = ""
         LastInputCSV     = ""
         LastBrowseFolder = ""
+        CIDRInputHistory  = @()
+        HostFileHistory   = @()
+        InputCSVHistory   = @()
         DefaultThreads   = 20
         DefaultTimeoutMs = 5000
         DefaultPlugins   = @()
-        DefaultOutputs   = @("MasterCSV", "SummaryReport")
-        DefaultPorts     = "22,80,135,443,445,3389"
+        DefaultOutputs   = @("MasterCSV", "SummaryReport", "PerPluginCSV", "DiscoveryCSV")
+        DefaultPorts     = ""
         LastOutputDir    = ".\output_reports"
     }
 }
@@ -405,6 +1302,42 @@ function Update-ConfigValue {
     } else {
         $script:Config | Add-Member -NotePropertyName $Key -NotePropertyValue $Value -Force
     }
+}
+
+function Push-InputHistory {
+    <#
+    .SYNOPSIS
+        Pushes a value to the front of a config history array (max 5, deduped).
+    #>
+    param([string]$ConfigKey, [string]$Value)
+    $history = @()
+    if ($script:Config.PSObject.Properties.Name -contains $ConfigKey) {
+        $history = @($script:Config.$ConfigKey | Where-Object { $_ })
+    }
+    $history = @($history | Where-Object { $_ -ne $Value })
+    $history = @($Value) + $history
+    if ($history.Count -gt 5) { $history = $history[0..4] }
+    Update-ConfigValue $ConfigKey $history
+}
+
+function Get-InputHistory {
+    <#
+    .SYNOPSIS
+        Returns history array from config, migrating from legacy Last* fields if needed.
+    #>
+    param([string]$HistoryKey, [string]$LegacyKey)
+    $history = @()
+    if ($script:Config.PSObject.Properties.Name -contains $HistoryKey) {
+        $history = @($script:Config.$HistoryKey | Where-Object { $_ })
+    }
+    # Migrate from legacy Last* field if history is empty
+    if ($history.Count -eq 0 -and $LegacyKey) {
+        if ($script:Config.PSObject.Properties.Name -contains $LegacyKey) {
+            $legacy = $script:Config.$LegacyKey
+            if ($legacy) { $history = @($legacy) }
+        }
+    }
+    return $history
 }
 
 # ============================================================
@@ -689,12 +1622,13 @@ function Invoke-HostDiscovery {
     $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $MaxThreads)
     $pool.Open()
     $jobs = [System.Collections.ArrayList]::new()
+    $progressState = [hashtable]::Synchronized(@{})
 
     foreach ($ip in $IPList) {
         $ps = [PowerShell]::Create()
         $ps.RunspacePool = $pool
         [void]$ps.AddScript({
-            param($IP, $Ports, $Timeout)
+            param($IP, $Ports, $Timeout, $Progress)
             $result = @{
                 IP        = $IP
                 Alive     = $false
@@ -714,20 +1648,49 @@ function Invoke-HostDiscovery {
                 $ping.Dispose()
             } catch {}
 
-            # Port scan
-            foreach ($port in $Ports) {
-                try {
-                    $client = New-Object System.Net.Sockets.TcpClient
-                    $ar = $client.BeginConnect($IP, $port, $null, $null)
-                    $waited = $ar.AsyncWaitHandle.WaitOne($Timeout, $false)
-                    if ($waited) {
-                        try { $client.EndConnect($ar) } catch {}
-                        $result.OpenPorts += $port
-                        $result.Alive = $true
+            # Port scan - batched async for efficiency with large port lists
+            $batchSize = 2000
+            $connectTimeout = 500
+            $openList = [System.Collections.ArrayList]::new()
+            $totalPorts = $Ports.Count
+            for ($i = 0; $i -lt $totalPorts; $i += $batchSize) {
+                $endIdx = [Math]::Min($i + $batchSize - 1, $totalPorts - 1)
+                $batch = @($Ports[$i..$endIdx])
+                $conns = [System.Collections.ArrayList]::new()
+                foreach ($port in $batch) {
+                    try {
+                        $c = New-Object System.Net.Sockets.TcpClient
+                        $ar = $c.BeginConnect($IP, $port, $null, $null)
+                        [void]$conns.Add(@{ C = $c; A = $ar; P = $port })
+                    } catch {}
+                }
+                [System.Threading.Thread]::Sleep($connectTimeout)
+                foreach ($conn in $conns) {
+                    try {
+                        if ($conn.A.IsCompleted) {
+                            try {
+                                $conn.C.EndConnect($conn.A)
+                                [void]$openList.Add($conn.P)
+                                $result.Alive = $true
+                            } catch {}
+                        }
+                        $conn.C.Close()
+                    } catch { try { $conn.C.Close() } catch {} }
+                }
+                # Report progress after batch: port range + open ports found so far
+                if ($Progress) {
+                    $Progress[$IP] = @{
+                        StartPort = $Ports[$i]
+                        EndPort   = $Ports[$endIdx]
+                        Scanned   = $endIdx + 1
+                        Total     = $totalPorts
+                        OpenPorts = @($openList)
                     }
-                    $client.Close()
-                } catch { try { $client.Close() } catch {} }
+                }
             }
+            $result.OpenPorts = @($openList)
+            # Mark this IP as done in progress
+            if ($Progress) { $Progress.Remove($IP) }
 
             # Reverse DNS
             if ($result.Alive) {
@@ -745,29 +1708,242 @@ function Invoke-HostDiscovery {
             }
 
             return $result
-        }).AddArgument($ip).AddArgument($PortList).AddArgument($TimeoutMs)
+        }).AddArgument($ip).AddArgument($PortList).AddArgument($TimeoutMs).AddArgument($progressState)
 
         $handle = $ps.BeginInvoke()
-        [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle })
+        [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle; IP = $ip })
     }
 
-    # Collect
+    # Collect results via polling with fixed-position scrollable display
     $liveHosts = [System.Collections.ArrayList]::new()
     $completed = 0
-    foreach ($job in $jobs) {
+    $total = $jobs.Count
+    $pending = [System.Collections.ArrayList]::new($jobs)
+    $spinChars = @('|', '/', '-', '\')
+    $spinIdx = 0
+    $startTime = [DateTime]::Now
+    $displayedPorts = @{}          # Track which ports we've counted per IP
+    $totalPortsFound = 0
+    $hostResultBuf = [System.Collections.ArrayList]::new()   # host result lines + colors
+    $portBuf = [System.Collections.ArrayList]::new()         # port discovery lines
+
+    # Display layout: hostWindow (6) + portHeader (1) + portWindow (6) + spinner (1) + hint (1) = 15 rows
+    $hostWinSize = 6
+    $portWinSize = 6
+    $displayRows = $hostWinSize + 1 + $portWinSize + 1 + 1  # 15
+
+    Write-Host "  Scanning $($PortList.Count) ports across $total hosts..." -ForegroundColor Gray
+
+    # Reserve vertical space and anchor
+    for ($ln = 0; $ln -lt $displayRows; $ln++) { Write-Host "" }
+    $anchorY = [Console]::CursorTop - $displayRows
+
+    [Console]::CursorVisible = $false
+    try {
+    while ($pending.Count -gt 0) {
+        # --- Check completed jobs ---
+        for ($i = $pending.Count - 1; $i -ge 0; $i--) {
+            $job = $pending[$i]
+            if ($job.Handle.IsCompleted) {
+                try {
+                    $r = $job.PowerShell.EndInvoke($job.Handle)
+                    if ($r -and $r.Count -gt 0) {
+                        $hostResult = $r[0]
+                        $completed++
+                        if ($hostResult.Alive) {
+                            [void]$liveHosts.Add($hostResult)
+                            $portCount = @($hostResult.OpenPorts).Count
+                            $osStr = if ($hostResult.OS) { $hostResult.OS } else { "Unknown" }
+                            $hostStr = if ($hostResult.Hostname) { $hostResult.Hostname } else { "" }
+                            $line = "  [{0}/{1}] [+] {2,-15} ALIVE  {3} open port(s)  {4}  {5}" -f `
+                                $completed, $total, $hostResult.IP, $portCount, $osStr, $hostStr
+                            [void]$hostResultBuf.Add(@{ Text = $line; Color = [ConsoleColor]::Green })
+                            $portsJoined = ($hostResult.OpenPorts | Sort-Object) -join ','
+                            Write-Log "ALIVE $($hostResult.IP) ($hostStr) -- OS=$osStr TTL=$($hostResult.TTL) Ports=[$portsJoined]" -Silent
+                        } else {
+                            $line = "  [{0}/{1}] [-] {2,-15} no response" -f $completed, $total, $hostResult.IP
+                            [void]$hostResultBuf.Add(@{ Text = $line; Color = [ConsoleColor]::DarkGray })
+                            Write-Log "DEAD $($hostResult.IP)" "DEBUG" -Silent
+                        }
+                    } else {
+                        $completed++
+                    }
+                } catch {
+                    $completed++
+                }
+                $job.PowerShell.Dispose()
+                $pending.RemoveAt($i)
+            }
+        }
+
+        # --- Check for newly discovered open ports ---
+        $portInfo = ""
         try {
-            $r = $job.PowerShell.EndInvoke($job.Handle)
-            if ($r -and $r.Count -gt 0 -and $r[0].Alive) {
-                [void]$liveHosts.Add($r[0])
+            $snapKeys = @($progressState.Keys)
+            foreach ($sKey in $snapKeys) {
+                $entry = $progressState[$sKey]
+                if ($entry -and $entry.OpenPorts -and $entry.OpenPorts.Count -gt 0) {
+                    if (-not $displayedPorts.ContainsKey($sKey)) { $displayedPorts[$sKey] = @{} }
+                    foreach ($op in $entry.OpenPorts) {
+                        if (-not $displayedPorts[$sKey].ContainsKey($op)) {
+                            $displayedPorts[$sKey][$op] = $true
+                            $totalPortsFound++
+                            [void]$portBuf.Add("  [*] ${sKey}:${op}")
+                        }
+                    }
+                }
+            }
+            # Port range info from first active host
+            if ($snapKeys.Count -gt 0) {
+                $sample = $progressState[$snapKeys[0]]
+                if ($sample) {
+                    $pct = [Math]::Round(($sample.Scanned / $sample.Total) * 100)
+                    $portInfo = " -- ports $($sample.StartPort)-$($sample.EndPort) ($pct%)"
+                }
             }
         } catch {}
-        $job.PowerShell.Dispose()
-        $completed++
-        if ($completed % 50 -eq 0) {
-            Write-Host "`r  Discovered: $($liveHosts.Count) alive / $completed scanned of $($IPList.Count)   " -NoNewline -ForegroundColor Gray
+
+        # --- Redraw the fixed display block ---
+        $row = $anchorY
+
+        # Host results window (last N entries)
+        $hStart = [Math]::Max(0, $hostResultBuf.Count - $hostWinSize)
+        for ($h = 0; $h -lt $hostWinSize; $h++) {
+            $idx = $hStart + $h
+            if ($idx -lt $hostResultBuf.Count) {
+                $entry = $hostResultBuf[$idx]
+                script:Write-LineAt -Row $row -Text $entry.Text -Fg $entry.Color
+            } else {
+                script:Write-LineAt -Row $row -Text ""
+            }
+            $row++
         }
+
+        # Port window header with total counter
+        $portHeader = "  -- Open ports ($totalPortsFound found) --"
+        script:Write-LineAt -Row $row -Text $portHeader -Fg ([ConsoleColor]::DarkCyan)
+        $row++
+
+        # Port discoveries window (last N entries)
+        $pStart = [Math]::Max(0, $portBuf.Count - $portWinSize)
+        for ($p = 0; $p -lt $portWinSize; $p++) {
+            $idx = $pStart + $p
+            if ($idx -lt $portBuf.Count) {
+                script:Write-LineAt -Row $row -Text $portBuf[$idx] -Fg ([ConsoleColor]::Cyan)
+            } else {
+                script:Write-LineAt -Row $row -Text ""
+            }
+            $row++
+        }
+
+        # Spinner / status line
+        $elapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+        $spin = $spinChars[$spinIdx % $spinChars.Count]
+        $spinIdx++
+        if ($pending.Count -gt 0) {
+            $statusLine = "  $spin  [{0}/{1} hosts] {2} scanning  {3} ports found{4}  elapsed {5}" -f `
+                $completed, $total, $pending.Count, $totalPortsFound, $portInfo, $elapsed
+            script:Write-LineAt -Row $row -Text $statusLine -Fg ([ConsoleColor]::Yellow)
+        }
+        $row++
+
+        # Hint line
+        script:Write-LineAt -Row $row -Text "  Press [E] to end scan early" -Fg ([ConsoleColor]::DarkGray)
+
+        # --- Check for early-exit keypress ---
+        $earlyExit = $false
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq [System.ConsoleKey]::E) {
+                # Show confirmation on the hint line
+                script:Write-LineAt -Row $row -Text "  End scan early? Press [Y] to confirm, any other key to continue" -Fg ([ConsoleColor]::White) -Bg ([ConsoleColor]::DarkRed)
+                $confirm = [Console]::ReadKey($true)
+                if ($confirm.Key -eq [System.ConsoleKey]::Y) {
+                    $earlyExit = $true
+                }
+            }
+        }
+
+        if ($earlyExit) {
+            # Harvest partial results from progressState for still-running hosts
+            foreach ($pJob in $pending) {
+                $jobIP = $pJob.IP
+                $completed++
+                # Check if progressState has partial port data for this host
+                try {
+                    $partial = $progressState[$jobIP]
+                    if ($partial -and $partial.OpenPorts -and $partial.OpenPorts.Count -gt 0) {
+                        $partialResult = @{
+                            IP        = $jobIP
+                            Alive     = $true
+                            OpenPorts = @($partial.OpenPorts)
+                            Hostname  = ""
+                            OS        = ""
+                            TTL       = 0
+                        }
+                        [void]$liveHosts.Add($partialResult)
+                        $portCount = $partial.OpenPorts.Count
+                        $pctDone = [Math]::Round(($partial.Scanned / $partial.Total) * 100)
+                        $line = "  [{0}/{1}] [~] {2,-15} PARTIAL {3} port(s) ({4}% scanned)" -f `
+                            $completed, $total, $jobIP, $portCount, $pctDone
+                        [void]$hostResultBuf.Add(@{ Text = $line; Color = [ConsoleColor]::DarkYellow })
+                    } else {
+                        $line = "  [{0}/{1}] [~] {2,-15} SKIPPED (scan ended early)" -f $completed, $total, $jobIP
+                        [void]$hostResultBuf.Add(@{ Text = $line; Color = [ConsoleColor]::DarkGray })
+                    }
+                } catch {
+                    $line = "  [{0}/{1}] [~] {2,-15} SKIPPED (scan ended early)" -f $completed, $total, $jobIP
+                    [void]$hostResultBuf.Add(@{ Text = $line; Color = [ConsoleColor]::DarkGray })
+                }
+                try { $pJob.PowerShell.Stop() } catch {}
+                try { $pJob.PowerShell.Dispose() } catch {}
+            }
+            $pending.Clear()
+
+            # Final redraw with partial results
+            $row = $anchorY
+            $hStart = [Math]::Max(0, $hostResultBuf.Count - $hostWinSize)
+            for ($h = 0; $h -lt $hostWinSize; $h++) {
+                $idx = $hStart + $h
+                if ($idx -lt $hostResultBuf.Count) {
+                    $e = $hostResultBuf[$idx]
+                    script:Write-LineAt -Row $row -Text $e.Text -Fg $e.Color
+                } else {
+                    script:Write-LineAt -Row $row -Text ""
+                }
+                $row++
+            }
+            $portHeader = "  -- Open ports ($totalPortsFound found) --"
+            script:Write-LineAt -Row $row -Text $portHeader -Fg ([ConsoleColor]::DarkCyan)
+            $row++
+            $pStart = [Math]::Max(0, $portBuf.Count - $portWinSize)
+            for ($p = 0; $p -lt $portWinSize; $p++) {
+                $idx = $pStart + $p
+                if ($idx -lt $portBuf.Count) {
+                    script:Write-LineAt -Row $row -Text $portBuf[$idx] -Fg ([ConsoleColor]::Cyan)
+                } else {
+                    script:Write-LineAt -Row $row -Text ""
+                }
+                $row++
+            }
+            script:Write-LineAt -Row $row -Text "  Scan ended early by user." -Fg ([ConsoleColor]::Yellow)
+            Write-Log "Discovery ended early by user. $completed/$total hosts processed, $totalPortsFound ports found." "WARN" -Silent
+            $row++
+            script:Write-LineAt -Row $row -Text ""
+            break
+        }
+
+        Start-Sleep -Milliseconds 250
     }
-    Write-Host "`r  Discovery complete: $($liveHosts.Count) alive hosts from $($IPList.Count) IPs scanned.     " -ForegroundColor Green
+    } finally {
+        [Console]::CursorVisible = $true
+    }
+
+    # Move cursor below display block and print final summary
+    [Console]::SetCursorPosition(0, $anchorY + $displayRows)
+    $totalElapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+    $partialTag = if ($completed -lt $total) { " (partial)" } else { "" }
+    Write-Host "  Discovery complete$partialTag`: $($liveHosts.Count) alive hosts ($totalPortsFound open ports) from $total IPs in $totalElapsed." -ForegroundColor Green
 
     $pool.Close()
     $pool.Dispose()
@@ -792,20 +1968,29 @@ function Invoke-PluginScan {
         [int]$TimeoutMs
     )
 
-    # Build test matrix: each target+port combination x each applicable plugin
+    # Build test matrix: each target x each plugin, scoped to relevant ports only
     $testQueue = [System.Collections.ArrayList]::new()
     foreach ($target in $Targets) {
         foreach ($plugin in $SelectedPlugins) {
             $ports = @()
             if ($target.Port) {
-                # Specific port provided (Validate or List mode)
+                # Specific port provided (Validate mode -- exact IP:port combo)
                 $ports = @($target.Port)
             } elseif ($plugin.ScanPorts -and $plugin.ScanPorts.Count -gt 0) {
-                # Plugin declares which ports it wants to scan
-                $ports = $plugin.ScanPorts
+                # Plugin declares specific ports it cares about.
+                # Test plugin's ScanPorts + any discovered open ports that overlap.
+                $pluginPortSet = @{}
+                foreach ($p in $plugin.ScanPorts) { $pluginPortSet[[int]$p] = $true }
+                # Also include discovered open ports that the plugin wants to check
+                # (the plugin's ScanPorts are always tested, discovered or not)
+                $ports = @($pluginPortSet.Keys | Sort-Object)
+                # Additionally, add any discovered open ports that the plugin is
+                # relevant for. For now, just test the plugin's declared ports.
+                # The plugin's TestBlock handles unreachable ports gracefully.
             } else {
-                # Use target's open ports if available
-                if ($target.OpenPorts) { $ports = $target.OpenPorts }
+                # Software-class plugin (ScanPorts is empty).
+                # Run once per host with port 0 as a sentinel.
+                $ports = @(0)
             }
 
             foreach ($port in $ports) {
@@ -872,41 +2057,71 @@ try {
         [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle; Test = $test })
     }
 
-    # Collect results
+    # Collect results via polling (real-time output as each test completes)
     $findings = [System.Collections.ArrayList]::new()
     $completed = 0
-    foreach ($job in $jobs) {
-        try {
-            $output = $job.PowerShell.EndInvoke($job.Handle)
-            if ($output -and $output.Count -gt 0) {
-                $r = $output[0]
-                [void]$findings.Add($r)
+    $total = $testQueue.Count
+    $pending = [System.Collections.ArrayList]::new($jobs)
+    $spinChars = @('|', '/', '-', '\')
+    $spinIdx = 0
+    $startTime = [DateTime]::Now
 
-                $symbol = switch ($r.Result) {
-                    "Remediated"   { "[FIXED]" }
-                    "Vulnerable"   { "[VULN]" }
-                    "Unreachable"  { "[DOWN]" }
-                    "Error"        { "[ERR]" }
-                    "Inconclusive" { "[???]" }
-                    default        { "[---]" }
+    while ($pending.Count -gt 0) {
+        for ($i = $pending.Count - 1; $i -ge 0; $i--) {
+            $job = $pending[$i]
+            if ($job.Handle.IsCompleted) {
+                # Clear progress line before printing result
+                Write-Host "`r                                                                        `r" -NoNewline
+                try {
+                    $output = $job.PowerShell.EndInvoke($job.Handle)
+                    if ($output -and $output.Count -gt 0) {
+                        $r = $output[0]
+                        [void]$findings.Add($r)
+
+                        $symbol = switch ($r.Result) {
+                            "Remediated"   { "[FIXED]" }
+                            "Vulnerable"   { "[VULN]" }
+                            "Unreachable"  { "[DOWN]" }
+                            "Error"        { "[ERR]" }
+                            "Inconclusive" { "[???]" }
+                            default        { "[---]" }
+                        }
+                        $color = switch ($r.Result) {
+                            "Remediated"  { "Green" }
+                            "Vulnerable"  { "Red" }
+                            "Unreachable" { "DarkYellow" }
+                            default       { "Gray" }
+                        }
+                        $completed++
+                        $detailStr = if ($r.Detail -and $r.Detail.Length -gt 80) { $r.Detail.Substring(0,77) + "..." } elseif ($r.Detail) { $r.Detail } else { "" }
+                        $targetStr = if ($r.Port -and $r.Port -ne '0') { "{0}:{1}" -f $r.IP, $r.Port } else { $r.IP }
+                        Write-Host ("  [{0}/{1}] {2,-8} {3} ({4}) -- {5}" -f `
+                            $completed, $total, $symbol, $targetStr, $r.PluginName, $detailStr
+                        ) -ForegroundColor $color
+                        # Full detail to log (no truncation)
+                        $logDetail = if ($r.Detail) { $r.Detail } else { "" }
+                        $logLevel = switch ($r.Result) { "Vulnerable" { "WARN" }; "Error" { "ERROR" }; default { "INFO" } }
+                        Write-Log "$($r.Result) $targetStr ($($r.PluginName)) -- $logDetail" $logLevel
+                    } else {
+                        $completed++
+                    }
+                } catch {
+                    $completed++
                 }
-                $color = switch ($r.Result) {
-                    "Remediated"  { "Green" }
-                    "Vulnerable"  { "Red" }
-                    "Unreachable" { "DarkYellow" }
-                    default       { "Gray" }
-                }
-                $completed++
-                Write-Host ("  [{0}/{1}] {2,-8} {3}:{4} ({5}) -- {6}" -f `
-                    $completed, $testQueue.Count, $symbol, $r.IP, $r.Port, $r.PluginName,
-                    $(if ($r.Detail.Length -gt 80) { $r.Detail.Substring(0,77) + "..." } else { $r.Detail })
-                ) -ForegroundColor $color
+                $job.PowerShell.Dispose()
+                $pending.RemoveAt($i)
             }
-        } catch {
-            $completed++
         }
-        $job.PowerShell.Dispose()
+        if ($pending.Count -gt 0) {
+            $elapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+            $spin = $spinChars[$spinIdx % $spinChars.Count]
+            $spinIdx++
+            Write-Host ("`r  $spin  [{0}/{1} complete] {2} tests running... elapsed {3}   " -f $completed, $total, $pending.Count, $elapsed) -NoNewline -ForegroundColor Yellow
+            Start-Sleep -Milliseconds 250
+        }
     }
+    # Clear progress line
+    Write-Host "`r                                                                        `r" -NoNewline
 
     $pool.Close()
     $pool.Dispose()
@@ -1194,30 +2409,48 @@ function Invoke-ListMode {
         [array]$SelectedOutputs,
         [int]$Threads,
         [int]$Timeout,
+        [int[]]$PortList,
         [string]$OutDir
     )
 
-    Write-Section "Loading Host List"
+    Write-Section "PHASE 1: Loading Host List + Port Discovery"
 
     $lines = Get-Content -Path $HostFilePath | Where-Object { $_ -match '\S' } |
-             ForEach-Object { $_.Trim() }
-    Write-Log "$($lines.Count) hosts loaded from $HostFilePath"
+             ForEach-Object { $_.Trim() } | Sort-Object -Unique
+    Write-Log "$($lines.Count) unique hosts loaded from $HostFilePath"
 
-    $targets = $lines | ForEach-Object {
+    # Run discovery to find open ports, resolve hostnames, guess OS
+    $liveHosts = Invoke-HostDiscovery -IPList $lines -MaxThreads $Threads `
+                                      -TimeoutMs $Timeout -PortList $PortList
+    Write-Log "$($liveHosts.Count) hosts alive of $($lines.Count)" "OK"
+
+    # Export discovery CSV if requested
+    if ($SelectedOutputs -contains "DiscoveryCSV") {
+        $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
+        Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
+    }
+
+    if ($liveHosts.Count -eq 0) {
+        Write-Log "No live hosts found. Nothing to scan." "WARN"
+        return
+    }
+
+    $targets = $liveHosts | ForEach-Object {
         @{
-            IP        = $_
-            Hostname  = ""
-            OpenPorts = @()
+            IP        = $_.IP
+            Hostname  = $_.Hostname
+            OpenPorts = $_.OpenPorts
+            OS        = $_.OS
             Port      = $null
         }
     }
 
-    Write-Section "Vulnerability Scanning"
+    Write-Section "PHASE 2: Vulnerability Scanning"
 
     $findings = Invoke-PluginScan -Targets $targets -SelectedPlugins $SelectedPlugins `
                                   -MaxThreads $Threads -TimeoutMs $Timeout
 
-    Write-Section "Output"
+    Write-Section "PHASE 3: Output"
     Export-Results -Findings $findings -SelectedOutputs $SelectedOutputs -OutDir $OutDir -Mode "List Scan"
 }
 
@@ -1232,13 +2465,30 @@ function Invoke-ValidateMode {
         [array]$SelectedOutputs,
         [int]$Threads,
         [int]$Timeout,
+        [int[]]$PortList,
         [string]$OutDir
     )
 
-    Write-Section "Loading OpenVAS CSV"
+    Write-Section "PHASE 1: Loading OpenVAS CSV"
 
     $rows = Import-OpenVASCSV -Path $CSVPath
     Write-Log "$($rows.Count) findings loaded"
+
+    # Extract unique IPs from the CSV and run discovery for host details
+    $uniqueIPs = @($rows | ForEach-Object {
+        (($_.ip.Trim() -split '\.') | ForEach-Object { [int]$_ }) -join '.'
+    } | Sort-Object -Unique)
+    Write-Log "$($uniqueIPs.Count) unique IPs in CSV"
+
+    $liveHosts = Invoke-HostDiscovery -IPList $uniqueIPs -MaxThreads $Threads `
+                                      -TimeoutMs $Timeout -PortList $PortList
+    Write-Log "$($liveHosts.Count) hosts alive of $($uniqueIPs.Count)" "OK"
+
+    # Export discovery CSV if requested
+    if ($SelectedOutputs -contains "DiscoveryCSV") {
+        $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
+        Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
+    }
 
     # Match each row to a validator
     $matchable = [System.Collections.ArrayList]::new()
@@ -1282,7 +2532,7 @@ function Invoke-ValidateMode {
 
     Write-Log "$($dedupedTargets.Count) unique validation tests after dedup"
 
-    Write-Section "Validating Findings"
+    Write-Section "PHASE 2: Validating Findings"
 
     # Build plugin-specific target lists and run scans
     $allFindings = [System.Collections.ArrayList]::new()
@@ -1309,7 +2559,7 @@ function Invoke-ValidateMode {
         $resultLookup[$key] = $f
     }
 
-    Write-Section "Output"
+    Write-Section "PHASE 3: Output"
 
     # Always produce the validated CSV for validate mode
     $valCSVPath = Join-Path $OutDir "Validated_$($script:Timestamp).csv"
@@ -1369,176 +2619,387 @@ if ($script:Validators.Count -eq 0) {
     exit 1
 }
 
-# --- Resolve threads/timeout ---
+# --- Resolve threads/timeout defaults ---
 $threads = if ($MaxThreads -gt 0) { $MaxThreads } elseif ($script:Config.DefaultThreads) { $script:Config.DefaultThreads } else { 20 }
 $timeout = if ($TimeoutMs -gt 0) { $TimeoutMs } elseif ($script:Config.DefaultTimeoutMs) { $script:Config.DefaultTimeoutMs } else { 5000 }
+$portStr = if ($Ports) { $Ports } elseif ($script:Config.DefaultPorts) { $script:Config.DefaultPorts } else { "" }
 
-# --- Determine mode ---
+# --- Determine mode from CLI flags ---
 $mode = ""
 if ($Scan)     { $mode = "Scan" }
 if ($List)     { $mode = "List" }
 if ($Validate) { $mode = "Validate" }
 
-if (-not $mode -and -not $NoMenu) {
-    # Interactive mode selection
-    $lastMode = $script:Config.LastMode
-    $modeItems = @(
-        @{ Name = "Network Scan"; Value = "Scan"; Selected = ($lastMode -eq "Scan"); Description = "Discover hosts on CIDRs and scan for vulnerabilities" }
-        @{ Name = "List Scan";    Value = "List"; Selected = ($lastMode -eq "List"); Description = "Scan specific hosts from a file" }
-        @{ Name = "Validate";     Value = "Validate"; Selected = ($lastMode -eq "Validate"); Description = "Validate OpenVAS findings against live hosts" }
-    )
-    # Default first item if nothing was last
-    if (-not $lastMode) { $modeItems[0].Selected = $true }
-    $modeResult = Show-CheckboxMenu -Title "What would you like to do?" -Items $modeItems -SingleSelect
-    $mode = $modeResult | Select-Object -First 1
+# ============================================================
+#  NON-INTERACTIVE PATH (-NoMenu or mode specified via CLI)
+# ============================================================
+if ($mode -and $NoMenu) {
+    # --- Plugin selection (CLI) ---
+    $selectedPlugins = @()
+    if ($Plugins) {
+        $pluginNames = $Plugins -split ',' | ForEach-Object { $_.Trim() }
+        $selectedPlugins = $script:Validators | Where-Object { $pluginNames -contains $_.Name }
+    } else {
+        $selectedPlugins = $script:Validators
+    }
+
+    if ($selectedPlugins.Count -eq 0) {
+        Write-Log "No plugins selected." "ERROR"
+        exit 1
+    }
+
+    # --- Output selection (CLI) ---
+    $selectedOutputs = @()
+    if ($Outputs) {
+        $selectedOutputs = $Outputs -split ',' | ForEach-Object { $_.Trim() }
+    } else {
+        $selectedOutputs = @("MasterCSV", "SummaryReport")
+    }
+
+    Write-Log "Mode: $mode"
+    Write-Log ("Plugins: {0}" -f (($selectedPlugins | ForEach-Object { $_.Name }) -join ', '))
+
+    # --- Mode-specific input gathering and execution (CLI) ---
+    switch ($mode) {
+        "Scan" {
+            $cidrList = @()
+            if ($CIDRs) {
+                $cidrList = $CIDRs -split ',' | ForEach-Object { $_.Trim() }
+            } elseif ($CIDRFile -and (Test-Path $CIDRFile)) {
+                $cidrList = Get-Content $CIDRFile | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }
+            }
+            if ($cidrList.Count -eq 0) {
+                Write-Log "No CIDRs provided." "ERROR"
+                exit 1
+            }
+
+            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+
+            Save-Config
+            Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
+                            -SelectedOutputs $selectedOutputs -Threads $threads `
+                            -Timeout $timeout -PortList $portList -OutDir $outDir
+        }
+        "List" {
+            if (-not $HostFile -or -not (Test-Path $HostFile)) {
+                Write-Log "No valid host file provided." "ERROR"
+                exit 1
+            }
+            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+
+            Save-Config
+            Invoke-ListMode -HostFilePath $HostFile -SelectedPlugins $selectedPlugins `
+                            -SelectedOutputs $selectedOutputs -Threads $threads `
+                            -Timeout $timeout -PortList $portList -OutDir $outDir
+        }
+        "Validate" {
+            if (-not $InputCSV -or -not (Test-Path $InputCSV)) {
+                Write-Log "No valid CSV file provided." "ERROR"
+                exit 1
+            }
+            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+
+            Save-Config
+            Invoke-ValidateMode -CSVPath $InputCSV -SelectedPlugins $selectedPlugins `
+                                -SelectedOutputs $selectedOutputs -Threads $threads `
+                                -Timeout $timeout -PortList $portList -OutDir $outDir
+        }
+    }
+
+    Save-Config
+    Write-Host ""
+    Write-Host "  ScottyScan complete." -ForegroundColor Green
+    Write-Host ""
+    exit 0
 }
 
-if (-not $mode) {
+# ============================================================
+#  INTERACTIVE PATH - State Machine with Back-Navigation
+# ============================================================
+#  Step 1: Mode select          -> Esc = exit
+#  Step 2: Plugin select        -> Esc = back to 1
+#  Step 3: Output select        -> Esc = back to 2
+#  Step 4: Settings             -> Esc = back to 3
+#  Step 5: Mode-specific input  -> Esc = back to 4
+#  Step 6: Confirmation screen  -> Esc = back to 5, Enter = execute
+# ============================================================
+
+$step = 1
+# Accumulate selections across steps so back-navigation preserves choices
+$selectedMode    = $mode  # may be pre-set from CLI flag without -NoMenu
+$selectedPlugins = @()
+$selectedOutputs = @()
+$modeInputData   = $null
+
+while ($step -ge 1 -and $step -le 6) {
+
+    switch ($step) {
+
+        # ---- STEP 1: Mode Selection ----
+        1 {
+            if ($selectedMode) {
+                # Mode was set via CLI flag (e.g. -Scan without -NoMenu) -- skip menu
+                $step = 2
+                continue
+            }
+
+            $lastMode = $script:Config.LastMode
+            $modeItems = @(
+                @{ Name = "Network Scan"; Value = "Scan";     Selected = ($lastMode -eq "Scan");     Description = "Discover hosts on CIDRs and scan for vulnerabilities" }
+                @{ Name = "List Scan";    Value = "List";     Selected = ($lastMode -eq "List");     Description = "Scan specific hosts from a file" }
+                @{ Name = "Validate";     Value = "Validate"; Selected = ($lastMode -eq "Validate"); Description = "Validate OpenVAS findings against live hosts" }
+            )
+            if (-not $lastMode) { $modeItems[0].Selected = $true }
+
+            $modeResult = Show-InteractiveMenu -Title "What would you like to do?" -Items $modeItems -SingleSelect -IsRootMenu
+            if ($null -eq $modeResult) {
+                # Escape at step 1 = exit
+                if (Test-IsConsoleHost) {
+                    Clear-Host
+                    try { [Console]::CursorVisible = $true } catch {}
+                }
+                Write-Host ""
+                Write-Host "  Cancelled." -ForegroundColor Yellow
+                Write-Host ""
+                exit 0
+            }
+            $selectedMode = $modeResult | Select-Object -First 1
+            if (-not $selectedMode) {
+                # Nothing selected (shouldn't happen with SingleSelect, but be safe)
+                continue
+            }
+            Update-ConfigValue "LastMode" $selectedMode
+            $step = 2
+        }
+
+        # ---- STEP 2: Plugin Selection ----
+        2 {
+            if ($Plugins) {
+                # CLI plugin filter active -- skip menu
+                $pluginNames = $Plugins -split ',' | ForEach-Object { $_.Trim() }
+                $selectedPlugins = $script:Validators | Where-Object { $pluginNames -contains $_.Name }
+                $step = 3
+                continue
+            }
+
+            $pluginItems = $script:Validators | ForEach-Object {
+                $isDefault = ($script:Config.DefaultPlugins.Count -eq 0) -or ($script:Config.DefaultPlugins -contains $_.Name)
+                @{
+                    Name        = $_.Name
+                    Value       = $_.Name
+                    Selected    = $isDefault
+                    Description = $_.Description
+                }
+            }
+            $selectedNames = Show-InteractiveMenu -Title "Which plugins to run?" -Items $pluginItems -AllowSelectAll
+            if ($null -eq $selectedNames) {
+                # Back to mode select
+                if (-not $mode) { $selectedMode = "" }  # only clear if mode wasn't CLI-specified
+                $step = 1
+                continue
+            }
+            $selectedPlugins = $script:Validators | Where-Object { $selectedNames -contains $_.Name }
+            if ($selectedPlugins.Count -eq 0) {
+                Write-Host "  No plugins selected. Select at least one." -ForegroundColor Red
+                continue  # re-show step 2
+            }
+            Update-ConfigValue "DefaultPlugins" @($selectedPlugins | ForEach-Object { $_.Name })
+            $step = 3
+        }
+
+        # ---- STEP 3: Output Selection ----
+        3 {
+            if ($Outputs) {
+                $selectedOutputs = $Outputs -split ',' | ForEach-Object { $_.Trim() }
+                $step = 4
+                continue
+            }
+
+            $outputItems = @(
+                @{ Name = "Master findings CSV";      Value = "MasterCSV";     Selected = ($script:Config.DefaultOutputs -contains "MasterCSV");     Description = "All findings in one CSV" }
+                @{ Name = "Executive summary report"; Value = "SummaryReport"; Selected = ($script:Config.DefaultOutputs -contains "SummaryReport"); Description = "Plain-text report for CAB/exec review" }
+                @{ Name = "Per-plugin result CSVs";   Value = "PerPluginCSV";  Selected = ($script:Config.DefaultOutputs -contains "PerPluginCSV");  Description = "Separate CSV per plugin" }
+                @{ Name = "Host discovery CSV";       Value = "DiscoveryCSV";  Selected = ($script:Config.DefaultOutputs -contains "DiscoveryCSV");  Description = "Live hosts with open ports, hostname, and OS" }
+            )
+            $outputResult = Show-InteractiveMenu -Title "Output options:" -Items $outputItems -AllowSelectAll
+            if ($null -eq $outputResult) {
+                $step = 2
+                continue
+            }
+            $selectedOutputs = @($outputResult)
+            Update-ConfigValue "DefaultOutputs" $selectedOutputs
+            Update-ConfigValue "LastOutputDir" $outDir
+            $step = 4
+        }
+
+        # ---- STEP 4: Settings (threads/timeout/ports) ----
+        4 {
+            $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr
+            if ($null -eq $settingsResult) {
+                $step = 3
+                continue
+            }
+            $threads = $settingsResult.Threads
+            $timeout = $settingsResult.Timeout
+            $portStr = $settingsResult.Ports
+            Update-ConfigValue "DefaultThreads" $threads
+            Update-ConfigValue "DefaultTimeoutMs" $timeout
+            Update-ConfigValue "DefaultPorts" $portStr
+            $step = 5
+        }
+
+        # ---- STEP 5: Mode-Specific Input ----
+        5 {
+            # Check if CLI already provided the needed input
+            $cliInputProvided = $false
+            switch ($selectedMode) {
+                "Scan" {
+                    if ($CIDRs -or ($CIDRFile -and (Test-Path $CIDRFile))) { $cliInputProvided = $true }
+                }
+                "List" {
+                    if ($HostFile -and (Test-Path $HostFile)) { $cliInputProvided = $true }
+                }
+                "Validate" {
+                    if ($InputCSV -and (Test-Path $InputCSV)) { $cliInputProvided = $true }
+                }
+            }
+
+            if ($cliInputProvided) {
+                # Build modeInputData from CLI params
+                switch ($selectedMode) {
+                    "Scan" {
+                        $cidrList = @()
+                        if ($CIDRs) {
+                            $cidrList = $CIDRs -split ',' | ForEach-Object { $_.Trim() }
+                        } elseif ($CIDRFile -and (Test-Path $CIDRFile)) {
+                            $cidrList = Get-Content $CIDRFile | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }
+                        }
+                        $modeInputData = @{ CIDRList = $cidrList; CIDRFile = $CIDRFile; CIDRs = ($cidrList -join ', ') }
+                    }
+                    "List"     { $modeInputData = @{ HostFile = $HostFile } }
+                    "Validate" { $modeInputData = @{ CSVPath = $InputCSV } }
+                }
+                $step = 6
+                continue
+            }
+
+            $modeInputData = Get-ModeInput -Mode $selectedMode -Config $script:Config
+            if ($null -eq $modeInputData) {
+                $step = 4
+                continue
+            }
+
+            # Persist to history
+            switch ($selectedMode) {
+                "Scan" {
+                    $histVal = if ($modeInputData.RawInput) { $modeInputData.RawInput }
+                               elseif ($modeInputData.CIDRFile) { $modeInputData.CIDRFile }
+                               elseif ($modeInputData.CIDRs) { $modeInputData.CIDRs }
+                               else { $null }
+                    if ($histVal) { Push-InputHistory "CIDRInputHistory" $histVal }
+                    if ($modeInputData.CIDRFile) { Update-ConfigValue "LastCIDRFile" $modeInputData.CIDRFile }
+                    if ($modeInputData.CIDRs) { Update-ConfigValue "LastCIDRs" $modeInputData.CIDRs }
+                }
+                "List" {
+                    Push-InputHistory "HostFileHistory" $modeInputData.HostFile
+                    Update-ConfigValue "LastHostFile" $modeInputData.HostFile
+                }
+                "Validate" {
+                    Push-InputHistory "InputCSVHistory" $modeInputData.CSVPath
+                    Update-ConfigValue "LastInputCSV" $modeInputData.CSVPath
+                }
+            }
+            $step = 6
+        }
+
+        # ---- STEP 6: Confirmation Screen ----
+        6 {
+            # Build input detail string for display
+            $inputDetail = ""
+            switch ($selectedMode) {
+                "Scan" {
+                    $cidrDisplay = ($modeInputData.CIDRList | Select-Object -First 3) -join ', '
+                    if ($modeInputData.CIDRList.Count -gt 3) { $cidrDisplay += " (+$($modeInputData.CIDRList.Count - 3) more)" }
+                    $inputDetail = $cidrDisplay
+                }
+                "List"     { $inputDetail = $modeInputData.HostFile }
+                "Validate" { $inputDetail = $modeInputData.CSVPath }
+            }
+
+            $confirmed = Show-ConfirmationScreen `
+                -Mode $selectedMode `
+                -PluginNames @($selectedPlugins | ForEach-Object { $_.Name }) `
+                -OutputNames $selectedOutputs `
+                -Threads $threads `
+                -Timeout $timeout `
+                -Ports $portStr `
+                -InputDetail $inputDetail
+
+            if (-not $confirmed) {
+                $step = 5
+                continue
+            }
+
+            # ---- EXECUTE: leave TUI mode, restore normal console ----
+            if (Test-IsConsoleHost) {
+                Clear-Host
+                try { [Console]::CursorVisible = $true } catch {}
+            }
+            Write-Banner
+            Write-Log "Mode: $selectedMode"
+            Write-Log ("Plugins: {0}" -f (($selectedPlugins | ForEach-Object { $_.Name }) -join ', '))
+
+            switch ($selectedMode) {
+                "Scan" {
+                    $cidrList = $modeInputData.CIDRList
+                    if ($cidrList.Count -eq 0) {
+                        Write-Log "No CIDRs provided." "ERROR"
+                        exit 1
+                    }
+                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+
+                    Save-Config
+                    Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
+                                    -SelectedOutputs $selectedOutputs -Threads $threads `
+                                    -Timeout $timeout -PortList $portList -OutDir $outDir
+                }
+                "List" {
+                    $hostFilePath = $modeInputData.HostFile
+                    if (-not $hostFilePath -or -not (Test-Path $hostFilePath)) {
+                        Write-Log "No valid host file provided." "ERROR"
+                        exit 1
+                    }
+                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+
+                    Save-Config
+                    Invoke-ListMode -HostFilePath $hostFilePath -SelectedPlugins $selectedPlugins `
+                                    -SelectedOutputs $selectedOutputs -Threads $threads `
+                                    -Timeout $timeout -PortList $portList -OutDir $outDir
+                }
+                "Validate" {
+                    $csvPath = $modeInputData.CSVPath
+                    if (-not $csvPath -or -not (Test-Path $csvPath)) {
+                        Write-Log "No valid CSV file provided." "ERROR"
+                        exit 1
+                    }
+                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+
+                    Save-Config
+                    Invoke-ValidateMode -CSVPath $csvPath -SelectedPlugins $selectedPlugins `
+                                        -SelectedOutputs $selectedOutputs -Threads $threads `
+                                        -Timeout $timeout -PortList $portList -OutDir $outDir
+                }
+            }
+
+            # Done -- break out of the state machine
+            $step = 7
+        }
+    }
+}
+
+if (-not $mode -and -not $selectedMode) {
     Write-Log "No mode specified. Use -Scan, -List, or -Validate (or run without -NoMenu for interactive)." "ERROR"
     exit 1
-}
-
-Update-ConfigValue "LastMode" $mode
-Write-Log "Mode: $mode"
-
-# --- Plugin selection ---
-$selectedPlugins = @()
-if ($Plugins) {
-    $pluginNames = $Plugins -split ','  | ForEach-Object { $_.Trim() }
-    $selectedPlugins = $script:Validators | Where-Object { $pluginNames -contains $_.Name }
-} elseif (-not $NoMenu) {
-    $pluginItems = $script:Validators | ForEach-Object {
-        $isDefault = ($script:Config.DefaultPlugins.Count -eq 0) -or ($script:Config.DefaultPlugins -contains $_.Name)
-        @{
-            Name        = $_.Name
-            Value       = $_.Name
-            Selected    = $isDefault
-            Description = $_.Description
-        }
-    }
-    $selectedNames = Show-CheckboxMenu -Title "Which plugins to run?" -Items $pluginItems -AllowSelectAll
-    $selectedPlugins = $script:Validators | Where-Object { $selectedNames -contains $_.Name }
-} else {
-    $selectedPlugins = $script:Validators  # NoMenu = all plugins
-}
-
-if ($selectedPlugins.Count -eq 0) {
-    Write-Log "No plugins selected." "ERROR"
-    exit 1
-}
-
-Update-ConfigValue "DefaultPlugins" @($selectedPlugins | ForEach-Object { $_.Name })
-Write-Log ("Plugins: {0}" -f (($selectedPlugins | ForEach-Object { $_.Name }) -join ', '))
-
-# --- Output selection ---
-$selectedOutputs = @()
-if ($Outputs) {
-    $selectedOutputs = $Outputs -split ',' | ForEach-Object { $_.Trim() }
-} elseif (-not $NoMenu) {
-    $outputItems = @(
-        @{ Name = "Master findings CSV";       Value = "MasterCSV";       Selected = ($script:Config.DefaultOutputs -contains "MasterCSV");       Description = "All findings in one CSV" }
-        @{ Name = "Executive summary report";  Value = "SummaryReport";   Selected = ($script:Config.DefaultOutputs -contains "SummaryReport");   Description = "Plain-text report for CAB/exec review" }
-        @{ Name = "Per-plugin result CSVs";    Value = "PerPluginCSV";    Selected = ($script:Config.DefaultOutputs -contains "PerPluginCSV");    Description = "Separate CSV per plugin" }
-        @{ Name = "Host discovery CSV";        Value = "DiscoveryCSV";    Selected = ($script:Config.DefaultOutputs -contains "DiscoveryCSV");    Description = "Live hosts with open ports and OS (Scan mode only)" }
-    )
-    $selectedOutputs = Show-CheckboxMenu -Title "Output options:" -Items $outputItems -AllowSelectAll
-} else {
-    $selectedOutputs = @("MasterCSV", "SummaryReport")
-}
-
-Update-ConfigValue "DefaultOutputs" $selectedOutputs
-Update-ConfigValue "LastOutputDir" $outDir
-
-# --- Mode-specific input gathering and execution ---
-switch ($mode) {
-    "Scan" {
-        # Gather CIDRs
-        $cidrList = @()
-        if ($CIDRs) {
-            $cidrList = $CIDRs -split ',' | ForEach-Object { $_.Trim() }
-        } elseif ($CIDRFile -and (Test-Path $CIDRFile)) {
-            $cidrList = Get-Content $CIDRFile | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }
-        } elseif (-not $NoMenu) {
-            $cidrInput = Show-TextPrompt -Prompt "Enter CIDRs (comma-separated) or path to CIDR file:" `
-                                         -LastValue $script:Config.LastCIDRs
-            if (Test-Path $cidrInput -ErrorAction SilentlyContinue) {
-                $cidrList = Get-Content $cidrInput | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }
-                Update-ConfigValue "LastCIDRFile" $cidrInput
-            } else {
-                $cidrList = $cidrInput -split ',' | ForEach-Object { $_.Trim() }
-            }
-            Update-ConfigValue "LastCIDRs" ($cidrList -join ', ')
-        }
-
-        if ($cidrList.Count -eq 0) {
-            Write-Log "No CIDRs provided." "ERROR"
-            exit 1
-        }
-
-        # Resolve ports
-        $portStr = if ($Ports) { $Ports } else { $script:Config.DefaultPorts }
-        if (-not $portStr) { $portStr = "22,80,135,443,445,3389" }
-        $portList = $portStr -split ',' | ForEach-Object { [int]$_.Trim() }
-
-        # Also add plugin-declared ScanPorts
-        foreach ($p in $selectedPlugins) {
-            if ($p.ScanPorts) {
-                $portList += $p.ScanPorts
-            }
-        }
-        $portList = $portList | Sort-Object -Unique
-
-        Save-Config
-        Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
-                        -SelectedOutputs $selectedOutputs -Threads $threads `
-                        -Timeout $timeout -PortList $portList -OutDir $outDir
-    }
-
-    "List" {
-        $hostFile = ""
-        if ($HostFile -and (Test-Path $HostFile)) {
-            $hostFile = $HostFile
-        } elseif (-not $NoMenu) {
-            $hostFile = Show-FilePrompt -Prompt "Host list file (one IP/hostname per line):" `
-                                        -LastPath $script:Config.LastHostFile `
-                                        -Filter "Text files (*.txt)|*.txt|All files (*.*)|*.*" `
-                                        -MustExist
-            Update-ConfigValue "LastHostFile" $hostFile
-        }
-
-        if (-not $hostFile -or -not (Test-Path $hostFile)) {
-            Write-Log "No valid host file provided." "ERROR"
-            exit 1
-        }
-
-        Save-Config
-        Invoke-ListMode -HostFilePath $hostFile -SelectedPlugins $selectedPlugins `
-                        -SelectedOutputs $selectedOutputs -Threads $threads `
-                        -Timeout $timeout -OutDir $outDir
-    }
-
-    "Validate" {
-        $csvPath = ""
-        if ($InputCSV -and (Test-Path $InputCSV)) {
-            $csvPath = $InputCSV
-        } elseif (-not $NoMenu) {
-            $csvPath = Show-FilePrompt -Prompt "OpenVAS CSV file:" `
-                                       -LastPath $script:Config.LastInputCSV `
-                                       -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" `
-                                       -MustExist
-            Update-ConfigValue "LastInputCSV" $csvPath
-        }
-
-        if (-not $csvPath -or -not (Test-Path $csvPath)) {
-            Write-Log "No valid CSV file provided." "ERROR"
-            exit 1
-        }
-
-        Save-Config
-        Invoke-ValidateMode -CSVPath $csvPath -SelectedPlugins $selectedPlugins `
-                            -SelectedOutputs $selectedOutputs -Threads $threads `
-                            -Timeout $timeout -OutDir $outDir
-    }
 }
 
 Save-Config

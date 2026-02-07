@@ -8,35 +8,37 @@ The goal: run one tool that can discover your whole environment, check for known
 
 ## Current State
 
-**ScottyScan.ps1 + plugins/ are UNTESTED.** They were written in a chat-based Claude session without the ability to execute PowerShell. Expect 5-15 issues on first run. Common problems from prior scripts in this project:
+**ScottyScan.ps1 has been tested in List mode against 14 hosts with all 4 plugins.** The core pipeline works end-to-end: host loading, discovery, plugin scanning, real-time output, CSV/report generation. The interactive TUI menu system has been fully rewritten and tested.
 
-- Unicode/non-ASCII characters that break PowerShell's parser (em dashes, box-drawing chars)
-- `$input` is a reserved PowerShell automatic variable -- the menu system may have used it
-- Byte array literals in heredocs/string injection can get mangled by the shell parser
-- RunspacePool scriptblock string injection is fragile (quote escaping, variable expansion)
-- `Write-Host -NoNewline` behavior varies across PS versions
-
-**What works (has been tested in production):**
-- The TLS ClientHello handshake logic (Send-TLSClientHello) -- confirmed working against Windows RDP endpoints
-- The SSH KEX_INIT parser (Get-SSHKexAlgorithms) -- confirmed working against Linux SSH endpoints
+**What works (tested in production):**
+- The TLS ClientHello handshake logic (Send-TLSClientHello) -- confirmed against Windows RDP endpoints
+- The SSH KEX_INIT parser (Get-SSHKexAlgorithms) -- confirmed against Linux SSH endpoints
 - The SSH-1 banner detection -- confirmed working
 - CIDR expansion logic
-- RunspacePool parallelism pattern
+- RunspacePool parallelism pattern (discovery + plugin scanning)
+- Interactive TUI menu system (arrow keys, spacebar, enter, escape, back-navigation)
+- Plugin loading from plugins/ directory
+- Config persistence (scottyscan.json load/save with history)
+- Host discovery with batched async port scanning (65535 ports)
+- Scan execution engine (Invoke-PluginScan) with scoped test matrix
+- Real-time console output during both discovery and plugin scanning
+- Output generators (Master CSV, summary report, per-plugin CSVs, discovery CSV)
+- List mode end-to-end
+- Verbose log file with full discovery + test result detail
 
 **What has NOT been tested:**
-- The interactive menu system (Show-CheckboxMenu, Show-FilePrompt, file picker)
-- Config persistence (scottyscan.json load/save)
-- Plugin loading from the plugins/ directory
-- The scan execution engine (Invoke-PluginScan) -- the RunspacePool + string-injected helpers
-- All three modes end-to-end (Scan, List, Validate)
-- Output generators (CSV, summary report)
+- Scan mode end-to-end (CIDR discovery -> scan)
+- Validate mode end-to-end (OpenVAS CSV -> validation)
+- Early exit (press E during discovery)
+- The 7Zip-Version plugin (PSRemoting/WMI both fail in current test environment -- likely needs credential passthrough or domain trust)
 
 ## Architecture
 
 ```
 ScottyScan/
-  ScottyScan.ps1              # Main script (~1550 lines)
+  ScottyScan.ps1              # Main script (~2850 lines)
   scottyscan.json             # Auto-created config file (persistent state)
+  dev-watch.ps1               # File watcher for live-reload during development
   plugins/
     DHEater-TLS.ps1           # D(HE)ater on SSL/TLS (CVE-2002-20001)
     DHEater-SSH.ps1           # D(HE)ater on SSH
@@ -45,14 +47,15 @@ ScottyScan/
     _PluginTemplate.ps1       # Template for new plugins (skipped by loader)
   legacy/
     Discover-And-Inventory.ps1  # Previous working script with features to merge
-  output_reports/               # Created at runtime
-    logs/
+  input_files/                  # Host lists, OpenVAS CSVs (gitignored)
+  output_reports/               # Created at runtime (gitignored)
+    logs/                       # Verbose per-run log files
 ```
 
 ### Three Modes
 
 - **-Scan**: CIDR sweep -> host discovery (ping + TCP probes) -> OS fingerprint -> run all selected plugins against discovered hosts
-- **-List**: Skip discovery, read IPs from a file, run selected plugins
+- **-List**: Skip discovery, read IPs from a file, run selected plugins. Still performs port discovery on listed hosts.
 - **-Validate**: Read an OpenVAS CSV, match each finding to a plugin by nvt_name, test only those specific host+port+vuln combos, produce before/after validated CSV
 
 ### Plugin API
@@ -60,23 +63,67 @@ ScottyScan/
 Each plugin calls `Register-Validator` with a hashtable:
 - `Name` - Unique identifier
 - `NVTPattern` - Regex matched against OpenVAS nvt_name column (for -Validate mode matching)
-- `ScanPorts` - Which ports to test in -Scan mode
+- `ScanPorts` - Which ports to test in -Scan/-List mode. Empty array = software-class plugin (runs once per host, no port).
 - `TestBlock` - ScriptBlock that receives `$Context` (IP, Port, Hostname, TimeoutMs, Credential) and returns `@{ Result = "Vulnerable"|"Remediated"|"Unreachable"|"Error"|"Inconclusive"; Detail = "..." }`
+
+Test matrix scoping: plugins are ONLY tested against their declared `ScanPorts`, NOT every discovered port. Software-class plugins (ScanPorts = @()) run once per host with port 0 as a sentinel.
 
 Helpers available inside TestBlock (injected as strings into RunspacePool):
 - `Test-TCPConnect` - TCP port reachability
 - `Send-TLSClientHello` - Send a TLS ClientHello with a specific cipher suite code
 - `Get-SSHKexAlgorithms` - SSH banner + KEX_INIT parser
 
-### Interactive Menu System
+### Interactive TUI Menu System
 
-When run without `-NoMenu`, the script presents checkbox-style menus for:
-1. Mode selection (Scan/List/Validate)
-2. Plugin selection (toggle which vuln checks to run)
-3. Output selection (Master CSV, summary report, per-plugin CSVs, discovery CSV)
-4. Input gathering (CIDRs, host files, OpenVAS CSVs) with file picker and last-used memory
+Full keyboard-navigable TUI using `[Console]::SetCursorPosition` + `[Console]::Write` for scroll-free rendering:
+- Arrow Up/Down: Move highlight cursor (wraps around)
+- Space: Toggle checkbox (multi) or select radio (single)
+- Enter: Confirm and proceed
+- Escape: Go back to previous step (or exit at first menu)
+- A/N: Select All / None (multi-select only)
 
-Config file (`scottyscan.json`) remembers all selections between runs.
+State machine flow with back-navigation:
+1. Mode select (Scan/List/Validate) -> Esc = exit
+2. Plugin select (multi-checkbox) -> Esc = back to 1
+3. Output select (multi-checkbox) -> Esc = back to 2
+4. Settings (threads/timeout/ports) -> Esc = back to 3
+5. Mode-specific input (CIDRs/file/CSV) -> Esc = back to 4
+6. Confirmation screen -> Esc = back to 5, Enter = execute
+
+File input prompts use a two-panel TUI: left panel shows last 5 history entries, right panel (Left arrow) has Browse/Type manually actions.
+
+Config file (`scottyscan.json`) remembers all selections between runs including input history.
+
+### Port Scanning
+
+Default: all 65535 ports. Configurable via Settings menu:
+- **All ports (1-65535)**: Full TCP sweep with priority ordering (Top 100 + plugin ports first, then remainder)
+- **Top 100 enterprise ports**: Common services only
+- **Custom port list**: User-specified CSV
+
+Port scanning uses batched async TCP connections (2000 per batch, 500ms connect timeout) with progress reported via `[hashtable]::Synchronized()` back to the main thread.
+
+### Real-Time Console Output
+
+**Discovery phase**: Fixed-position 15-row display block (redrawn in place via Write-LineAt):
+- Host results window (last 6 entries)
+- Open port discoveries window (last 6 entries + total counter)
+- Spinner with host count, port count, current port range %, elapsed time
+- Press [E] to end scan early (with Y/N confirmation, harvests partial results)
+
+**Plugin scan phase**: Scrolling output with each test result as it completes, plus spinner with elapsed time.
+
+### Logging
+
+`Write-Log` writes to both console and `output_reports/logs/ScottyScan_<timestamp>.log`. Supports `-Silent` switch for log-only writes during TUI rendering.
+
+Log captures:
+- Plugin loading
+- Mode, plugin, and config selections
+- Every discovered host with full port list
+- Every plugin test result with full (untruncated) detail
+- Output file paths
+- Early exit events
 
 ## What Needs To Be Merged From Legacy
 
@@ -137,23 +184,30 @@ These are real issues we hit during development. Watch for them:
 6. **IP normalization** -- OpenVAS exports zero-padded IPs (192.168.101.001). Always normalize to integers.
 7. **Remote Registry service** -- Must be running on target Windows hosts for the fastest software enumeration method. May need to be started remotely first.
 8. **WMI Win32_Product is slow** -- It can trigger MSI reconfiguration on the target. Use as last-resort fallback only.
+9. **Write-Host during TUI rendering** -- Never call Write-Host (or Write-Log without -Silent) inside a Write-LineAt rendering loop. It corrupts the fixed-position display. Use Write-Log -Silent for file-only logging during TUI sections.
+10. **ASCII art in heredocs** -- Backslashes and special characters in banner heredocs are fragile during editing. The banner has been manually corrected multiple times. Don't edit it unless necessary.
+11. **[Console]::KeyAvailable** -- Use `[System.ConsoleKey]::E` not `[ConsoleKeyCode]::E` for key comparisons.
 
 ## Testing Environment
 
 - Windows domain environment with domain admin privileges
 - Test CIDRs: 192.168.100.0/24 and 192.168.101.0/24
 - Mix of Windows (Server 2012 R2 through current) and Linux (Ubuntu 22/24, FreeBSD, Fedora 33)
-- ESXi hosts at .114 and .115 (SSH-1 + D(HE)ater still outstanding)
+- ESXi hosts at .17 and .26 (D(HE)ater on SSH confirmed vulnerable, 5 DHE kex algorithms)
 - Run from admin PowerShell on a domain-joined workstation
+- Parser check: `powershell -NoProfile -Command '[System.Management.Automation.Language.Parser]::ParseFile("ScottyScan.ps1", [ref]$null, [ref]$errors); $errors.Count'`
 
 ## Priority Order for Development
 
-1. Get ScottyScan.ps1 running without errors (fix parser issues, test menu system)
-2. Test each mode end-to-end (-Scan with a small CIDR, -List with a few hosts, -Validate with the OpenVAS CSV)
-3. Merge OS fingerprinting from legacy script
-4. Merge software inventory from legacy script
-5. Merge flag rules engine from legacy script
-6. Add any new plugins as needed
+1. ~~Get ScottyScan.ps1 running without errors~~ DONE
+2. ~~Test List mode end-to-end~~ DONE
+3. Test Scan mode end-to-end (-Scan with a small CIDR)
+4. Test Validate mode end-to-end (-Validate with the OpenVAS CSV)
+5. Fix 7Zip-Version plugin (credential passthrough for PSRemoting/WMI)
+6. Merge OS fingerprinting from legacy script
+7. Merge software inventory from legacy script
+8. Merge flag rules engine from legacy script
+9. Add any new plugins as needed
 
 ## OpenVAS CSV Format
 
@@ -166,3 +220,19 @@ Queued,192.168.100.164,ilas1win1002.infowerks.com,3389,tcp,7.5,High,30,Diffie-He
 Note: nvt_name is the LAST column and can contain commas (the D(HE)ater entries do). Parse accordingly.
 
 Status values: Queued, Pending Review, Remediated, Confirmed Vulnerable
+
+## Key Functions Reference
+
+| Function | Lines | Purpose |
+|---|---|---|
+| `Build-PortList` | ~134 | Resolves port config to int[] with priority ordering |
+| `Write-Log` | ~221 | Console + file logging with -Silent switch |
+| `Write-LineAt` | ~278 | TUI primitive: write at absolute row, no scroll |
+| `Show-InteractiveMenu` | ~330 | Arrow-key navigable single/multi-select menu |
+| `Show-FilePrompt` | ~680 | Two-panel file history + action TUI |
+| `Show-SettingsMenu` | ~870 | Thread/timeout/port configuration |
+| `Show-ConfirmationScreen` | ~1050 | Pre-execution summary with Enter/Esc |
+| `Invoke-HostDiscovery` | ~1600 | Batched async port scan with TUI progress |
+| `Invoke-PluginScan` | ~1960 | Scoped test matrix with real-time results |
+| `Export-MasterCSV` | ~2050 | CSV output generator |
+| `Export-SummaryReport` | ~2070 | Human-readable text report |
