@@ -36,7 +36,7 @@ The goal: run one tool that can discover your whole environment, check for known
 
 ```
 ScottyScan/
-  ScottyScan.ps1              # Main script (~2850 lines)
+  ScottyScan.ps1              # Main script (~4140 lines)
   scottyscan.json             # Auto-created config file (persistent state)
   dev-watch.ps1               # File watcher for live-reload during development
   plugins/
@@ -84,11 +84,12 @@ Full keyboard-navigable TUI using `[Console]::SetCursorPosition` + `[Console]::W
 
 State machine flow with back-navigation:
 1. Mode select (Scan/List/Validate) -> Esc = exit
-2. Plugin select (multi-checkbox) -> Esc = back to 1
-3. Output select (multi-checkbox) -> Esc = back to 2
-4. Settings (threads/timeout/ports) -> Esc = back to 3
-5. Mode-specific input (CIDRs/file/CSV) -> Esc = back to 4
-6. Confirmation screen -> Esc = back to 5, Enter = execute
+2. Plugin select (multi-checkbox, includes "Software Version Check") -> Esc = back to 1
+3. Flag rules config (conditional -- only if Software Version Check selected) -> Esc = back to 2
+4. Output select (multi-checkbox) -> Esc = back to 3 or 2
+5. Settings (threads/timeout/ports) -> Esc = back to 4
+6. Mode-specific input (CIDRs/file/CSV) -> Esc = back to 5
+7. Confirmation screen -> Esc = back to 6, Enter = execute
 
 File input prompts use a two-panel TUI: left panel shows last 5 history entries, right panel (Left arrow) has Browse/Type manually actions.
 
@@ -125,9 +126,36 @@ Log captures:
 - Output file paths
 - Early exit events
 
+### Software Version Check Engine (Integrated)
+
+The software version check engine has been merged from the legacy script as a core feature. It appears as "Software Version Check" in the plugin selection menu but executes as a separate phase between discovery and plugin scanning.
+
+**Architecture:**
+- Appears in plugin menu as first item (`__SoftwareVersionCheck__` value)
+- Runs `Invoke-SoftwareCheck` which dispatches one RunspacePool job per Windows host
+- Per-host: Remote Registry -> PSRemoting -> WMI fallback chain, deduplicate, apply all flag rules
+- Returns findings in the same `@{ IP; Port; Hostname; PluginName; Result; Detail }` format as `Invoke-PluginScan`
+- Findings merge into the main results stream for unified output
+- Produces its own outputs: `SoftwareInventory_ALL_*.csv`, `SoftwareInventory_FILTERED_*.csv`, `FLAGGED_*_TARGETS_*.csv`, `FLAGGED_*_IPs_*.txt`
+
+**Flag Rules:**
+- Specified via CLI: `-FlagFilter "*notepad*,*7-zip*" -FlagVersion "LT8.9.1,LT24.9.0" -FlagLabel "CVE-2025-15556,CVE-2024-11477"`
+- Or via rule file: `-FlagFilterFile .\flag_rules.csv` (format: `pattern,versionrule,label` per line)
+- Version operators: LT, LE, GT, GE, EQ, NE, * (text); <, <=, >, >=, =, !=, * (in files)
+- Interactive: Step 3 in TUI state machine offers Load from file / Enter manually / Use saved / Skip
+- Saved rules persist in `scottyscan.json` under `SavedFlagRules`
+
+**Execution flow in Scan/List modes:**
+```
+Phase 1: Host Discovery (existing)
+Phase 2: Software Version Check (NEW -- conditional on selection)
+Phase 3: Vulnerability Scanning (existing plugins, renumbered)
+Phase 4: Output (existing + flagged software merged)
+```
+
 ## What Needs To Be Merged From Legacy
 
-`legacy/Discover-And-Inventory.ps1` is a tested, working script with features that ScottyScan currently lacks. The following need to be integrated:
+`legacy/Discover-And-Inventory.ps1` has one remaining feature to merge:
 
 ### 1. Detailed OS Fingerprinting (HIGH PRIORITY)
 
@@ -140,37 +168,9 @@ ScottyScan currently only does TTL-based guessing (<=64 = Linux, <=128 = Windows
 
 This should be added to the host discovery phase in `-Scan` mode. The `Invoke-HostDiscovery` function needs to be enhanced.
 
-### 2. Software Inventory Engine (HIGH PRIORITY)
+### ~~2. Software Inventory Engine~~ DONE -- merged as Software Version Check
 
-The legacy script has a complete Windows software inventory system:
-
-- **Triple-method enumeration**: Remote Registry (fastest) -> PSRemoting fallback -> WMI fallback
-- **Registry paths**: Both `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*` and `HKLM:\SOFTWARE\WOW6432Node\...` for x86/x64
-- **Deduplication** across methods
-- **Architecture detection** (x86/x64) and install path capture
-- **Wildcard filtering** via `-SoftwareFilter "*notepad*,*putty*"`
-
-This should become an optional phase in `-Scan` mode, controlled by the output selection menu (the "Full software inventory per host" checkbox). It should produce its own `SoftwareInventory_<timestamp>.csv`.
-
-### 3. Generic Vulnerability Flagging Engine (MEDIUM PRIORITY)
-
-The legacy script has a rule-based flagging system for software versions:
-
-- **Flag rules** specified as: pattern, version_rule, label
-  - Example: `*notepad*,<8.9.1,CVE-2025-15556 supply chain attack`
-- **Version operators**: `<`, `<=`, `>`, `>=`, `=`, `!=`, `*` (wildcard = flag any version found)
-- **Input methods**: CLI parameters (`-FlagFilter`, `-FlagVersion`, `-FlagLabel`) or a CSV file (`-FlagFilterFile`)
-- **Output**: Per-app remediation CSVs + IP lists for feeding into deployment scripts
-
-This could become a software-class plugin or a built-in phase that runs after software inventory. The flag rules file is powerful -- it lets you define multiple software vulnerability checks in one file.
-
-### Integration Approach
-
-The cleanest way to merge these:
-
-1. **OS fingerprinting** -- Enhance the RunspacePool discovery scriptblock in `Invoke-HostDiscovery` to add WMI/SSH probes after the basic ping+port scan
-2. **Software inventory** -- Add as a new phase function `Invoke-SoftwareInventory` that runs on Windows hosts after discovery, with its own output CSV. Gate it behind the output selection menu.
-3. **Flag engine** -- Add as a new menu option or a `-FlagRules` parameter that accepts a CSV file. Run it against software inventory results. Could also be implemented as a plugin that operates on inventory data rather than network probes.
+### ~~3. Generic Vulnerability Flagging Engine~~ DONE -- merged as part of Software Version Check
 
 ## Known PowerShell Gotchas From This Project
 
@@ -205,9 +205,10 @@ These are real issues we hit during development. Watch for them:
 4. Test Validate mode end-to-end (-Validate with the OpenVAS CSV)
 5. Fix 7Zip-Version plugin (credential passthrough for PSRemoting/WMI)
 6. Merge OS fingerprinting from legacy script
-7. Merge software inventory from legacy script
-8. Merge flag rules engine from legacy script
-9. Add any new plugins as needed
+7. ~~Merge software inventory from legacy script~~ DONE
+8. ~~Merge flag rules engine from legacy script~~ DONE
+9. Test Software Version Check end-to-end (interactive + CLI modes)
+10. Add any new plugins as needed
 
 ## OpenVAS CSV Format
 
@@ -232,7 +233,15 @@ Status values: Queued, Pending Review, Remediated, Confirmed Vulnerable
 | `Show-FilePrompt` | ~680 | Two-panel file history + action TUI |
 | `Show-SettingsMenu` | ~870 | Thread/timeout/port configuration |
 | `Show-ConfirmationScreen` | ~1050 | Pre-execution summary with Enter/Esc |
-| `Invoke-HostDiscovery` | ~1600 | Batched async port scan with TUI progress |
-| `Invoke-PluginScan` | ~1960 | Scoped test matrix with real-time results |
-| `Export-MasterCSV` | ~2050 | CSV output generator |
-| `Export-SummaryReport` | ~2070 | Human-readable text report |
+| `Compare-VersionStrings` | ~1590 | Dotted version comparison (-1/0/1) |
+| `Test-VersionAgainstRule` | ~1620 | Version rule evaluation (LT/LE/GT/GE/EQ/NE/*) |
+| `Import-FlagRules` | ~1700 | Parse flag rules from CLI params or CSV file |
+| `Get-SoftwareFromRegistry` | ~1820 | Remote Registry software enumeration |
+| `Get-SoftwareFromPSRemoting` | ~1860 | PSRemoting fallback enumeration |
+| `Get-SoftwareFromWMI` | ~1920 | WMI Win32_Product fallback (slow) |
+| `Invoke-SoftwareCheck` | ~2250 | RunspacePool software check with flag rules |
+| `Export-SoftwareOutputs` | ~2420 | Flagged CSVs, IP lists, inventory CSVs |
+| `Invoke-HostDiscovery` | ~2530 | Batched async port scan with TUI progress |
+| `Invoke-PluginScan` | ~2880 | Scoped test matrix with real-time results |
+| `Export-MasterCSV` | ~2960 | CSV output generator |
+| `Export-SummaryReport` | ~2980 | Human-readable text report |

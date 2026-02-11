@@ -61,6 +61,25 @@
     TCP ports to probe during discovery. Default: all (1-65535).
     Use 'top100' for top 100 enterprise ports, or a comma-separated list.
 
+.PARAMETER FlagFilter
+    Comma-separated wildcard patterns for vulnerability flagging.
+    Each position corresponds to the same position in -FlagVersion.
+    E.g. "*notepad*,*putty*,*flash*"
+
+.PARAMETER FlagVersion
+    Comma-separated version thresholds. Text operators: LT, LE, GT, GE, EQ, NE, *.
+    E.g. "LT8.9.1,LT0.82,*"
+
+.PARAMETER FlagLabel
+    Comma-separated labels for each flag rule.
+    E.g. "CVE-2025-15556,CVE-2024-31497,EOL software"
+
+.PARAMETER FlagFilterFile
+    Path to a CSV rule file (pattern,versionrule,label per line).
+
+.PARAMETER SoftwareFilterFile
+    Path to a text file with one wildcard pattern per line for inventory filtering.
+
 .EXAMPLE
     # Interactive - launches menu
     .\ScottyScan.ps1
@@ -76,6 +95,18 @@
 .EXAMPLE
     # CLI validate
     .\ScottyScan.ps1 -Validate -InputCSV .\vulns.csv -NoMenu
+
+.EXAMPLE
+    # CLI list scan with software version check and flag rules
+    .\ScottyScan.ps1 -List -HostFile .\targets.txt -NoMenu `
+        -Plugins "SoftwareVersionCheck,DHEater-TLS" `
+        -FlagFilter "*notepad*,*7-zip*" -FlagVersion "LT8.9.1,LT24.9.0" `
+        -FlagLabel "CVE-2025-15556,CVE-2024-11477"
+
+.EXAMPLE
+    # Flag rules from a CSV file
+    .\ScottyScan.ps1 -List -HostFile .\targets.txt -NoMenu `
+        -Plugins "SoftwareVersionCheck" -FlagFilterFile .\flag_rules.csv
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Interactive')]
@@ -102,6 +133,11 @@ param(
     [PSCredential]$Credential,
     [string]$Ports,
     [string]$SoftwareFilter,
+    [string]$SoftwareFilterFile,
+    [string]$FlagFilter,
+    [string]$FlagVersion,
+    [string]$FlagLabel,
+    [string]$FlagFilterFile,
     [string]$PluginDir
 )
 
@@ -1138,7 +1174,8 @@ function Show-ConfirmationScreen {
         [int]$Threads,
         [int]$Timeout,
         [string]$Ports,
-        [string]$InputDetail
+        [string]$InputDetail,
+        [string]$SoftwareCheckDetail
     )
 
     $portsDisplay = Get-PortDisplayString $Ports
@@ -1151,6 +1188,9 @@ function Show-ConfirmationScreen {
         Write-Host ""
         Write-Host "  Mode:      $Mode" -ForegroundColor White
         Write-Host "  Plugins:   $($PluginNames -join ', ')" -ForegroundColor White
+        if ($SoftwareCheckDetail) {
+            Write-Host "  SW Check:  $SoftwareCheckDetail" -ForegroundColor White
+        }
         Write-Host "  Outputs:   $($OutputNames -join ', ')" -ForegroundColor White
         Write-Host "  Threads:   $Threads" -ForegroundColor White
         Write-Host "  Timeout:   ${Timeout}ms" -ForegroundColor White
@@ -1176,6 +1216,9 @@ function Show-ConfirmationScreen {
         script:Write-LineAt -Row $r -Text ""; $r++
         script:Write-LineAt -Row $r -Text "  Mode:      $Mode" -Fg White; $r++
         script:Write-LineAt -Row $r -Text "  Plugins:   $($PluginNames -join ', ')" -Fg White; $r++
+        if ($SoftwareCheckDetail) {
+            script:Write-LineAt -Row $r -Text "  SW Check:  $SoftwareCheckDetail" -Fg White; $r++
+        }
         script:Write-LineAt -Row $r -Text "  Outputs:   $($OutputNames -join ', ')" -Fg White; $r++
         script:Write-LineAt -Row $r -Text "  Threads:   $Threads" -Fg White; $r++
         script:Write-LineAt -Row $r -Text "  Timeout:   ${Timeout}ms" -Fg White; $r++
@@ -1275,15 +1318,18 @@ function Load-Config {
         LastHostFile     = ""
         LastInputCSV     = ""
         LastBrowseFolder = ""
-        CIDRInputHistory  = @()
-        HostFileHistory   = @()
-        InputCSVHistory   = @()
+        CIDRInputHistory    = @()
+        HostFileHistory     = @()
+        InputCSVHistory     = @()
+        FlagRuleFileHistory = @()
         DefaultThreads   = 20
         DefaultTimeoutMs = 5000
         DefaultPlugins   = @()
         DefaultOutputs   = @("MasterCSV", "SummaryReport", "PerPluginCSV", "DiscoveryCSV")
         DefaultPorts     = ""
         LastOutputDir    = ".\output_reports"
+        SavedFlagRules   = @()
+        LastSoftwareFilter = ""
     }
 }
 
@@ -1579,6 +1625,499 @@ function Get-SSHKexAlgorithms {
         $kexList = [System.Text.Encoding]::ASCII.GetString($kexBuf, $offset, $kexListLen)
         return @{ Banner = $banner; KexAlgorithms = ($kexList -split ',') }
     } catch { try { $client.Close() } catch {}; return $null }
+}
+'@
+
+# ============================================================
+#  VERSION COMPARISON ENGINE
+# ============================================================
+
+function Compare-VersionStrings {
+    <#
+    .SYNOPSIS
+        Compares two dotted version strings. Returns -1, 0, or 1.
+        -1 = Current is LESS than Target
+         0 = Equal
+         1 = Current is GREATER than Target
+    #>
+    param([string]$Current, [string]$Target)
+
+    if (-not $Current -or -not $Target) { return -1 }
+
+    try {
+        $cParts = $Current -split '\.' | ForEach-Object { [int]$_ }
+        $tParts = $Target  -split '\.' | ForEach-Object { [int]$_ }
+
+        $maxLen = [Math]::Max($cParts.Count, $tParts.Count)
+        for ($i = 0; $i -lt $maxLen; $i++) {
+            $c = if ($i -lt $cParts.Count) { $cParts[$i] } else { 0 }
+            $t = if ($i -lt $tParts.Count) { $tParts[$i] } else { 0 }
+            if ($c -lt $t) { return -1 }
+            if ($c -gt $t) { return 1 }
+        }
+        return 0
+    }
+    catch { return -1 }
+}
+
+function Test-VersionAgainstRule {
+    <#
+    .SYNOPSIS
+        Tests a version string against a flag rule expression.
+        Text operators:   LT8.9.1  LE8.8.8  GT1.0  GE2.0  EQ5.5.1  NE8.9.1  *
+        Symbol operators: <8.9.1   <=8.8.8  >1.0   >=2.0  =5.5.1   !=8.9.1  *
+        Returns $true if the version IS FLAGGED (i.e., vulnerable/matching).
+    #>
+    param([string]$Version, [string]$Rule)
+
+    $Rule = $Rule.Trim()
+
+    # Wildcard -- flag everything
+    if ($Rule -eq '*') { return $true }
+
+    # No version on the host but rule expects one -- flag it (unknown = assume bad)
+    if ([string]::IsNullOrWhiteSpace($Version)) { return $true }
+
+    # Parse operator and threshold -- try text operators first (case-insensitive),
+    # then fall back to symbol operators for flag-rule-file compatibility.
+    $operator = ''
+    $threshold = ''
+
+    if ($Rule -match '^(LE|GE|NE|LT|GT|EQ)(.+)$') {
+        $opText    = $Matches[1].ToUpper()
+        $threshold = $Matches[2].Trim()
+        $operator  = switch ($opText) {
+            'LT' { '<'  }
+            'LE' { '<=' }
+            'GT' { '>'  }
+            'GE' { '>=' }
+            'EQ' { '='  }
+            'NE' { '!=' }
+        }
+    }
+    elseif ($Rule -match '^(<=|>=|!=|<|>|=)(.+)$') {
+        $operator  = $Matches[1]
+        $threshold = $Matches[2].Trim()
+    }
+    else {
+        # No operator -- treat as "less than" (most common remediation case)
+        $operator  = '<'
+        $threshold = $Rule
+    }
+
+    $cmp = Compare-VersionStrings -Current $Version -Target $threshold
+
+    switch ($operator) {
+        '<'  { return ($cmp -lt 0) }
+        '<=' { return ($cmp -le 0) }
+        '>'  { return ($cmp -gt 0) }
+        '>=' { return ($cmp -ge 0) }
+        '='  { return ($cmp -eq 0) }
+        '!=' { return ($cmp -ne 0) }
+        default { return $false }
+    }
+}
+
+function Get-VersionStatus {
+    <#
+    .SYNOPSIS
+        Returns a human-readable status string for a version against a rule.
+    #>
+    param([string]$Version, [string]$Rule)
+
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        return "NO VERSION - FLAGGED (assume vulnerable)"
+    }
+
+    $isFlagged = Test-VersionAgainstRule -Version $Version -Rule $Rule
+
+    if ($isFlagged) {
+        return "*** FLAGGED *** (v$Version matches rule: $Rule)"
+    }
+    else {
+        return "OK (v$Version passes rule: $Rule)"
+    }
+}
+
+function Import-FlagRules {
+    <#
+    .SYNOPSIS
+        Builds an array of flag rule objects from CLI parameters and/or a rule file.
+        Each rule: @{ Pattern = "*notepad*"; VersionRule = "LT8.9.1"; Label = "CVE-..." }
+    #>
+    param(
+        [string]$FlagFilter,
+        [string]$FlagVersion,
+        [string]$FlagLabel,
+        [string]$FlagFilterFile
+    )
+
+    $flagRules = [System.Collections.Generic.List[PSObject]]::new()
+
+    # Method 1: From file (CSV-style: pattern,versionrule,label)
+    if ($FlagFilterFile -and (Test-Path $FlagFilterFile)) {
+        $flagLines = Get-Content -Path $FlagFilterFile | Where-Object { $_.Trim() -ne "" -and $_ -notmatch '^\s*#' }
+        foreach ($line in $flagLines) {
+            $cols = $line -split ',' | ForEach-Object { $_.Trim() }
+            if ($cols.Count -ge 2) {
+                $flagRules.Add([PSCustomObject]@{
+                    Pattern     = $cols[0]
+                    VersionRule = $cols[1]
+                    Label       = if ($cols.Count -ge 3) { ($cols[2..($cols.Count-1)] -join ',').Trim() } else { "" }
+                })
+            }
+        }
+        Write-Log "Loaded $($flagRules.Count) flag rules from $FlagFilterFile"
+    }
+
+    # Method 2: From command-line parameters (positional correspondence)
+    if ($FlagFilter) {
+        $fPatterns = @($FlagFilter  -split ',' | ForEach-Object { $_.Trim() })
+        $fVersions = @(if ($FlagVersion) { $FlagVersion -split ',' | ForEach-Object { $_.Trim() } } else { @() })
+        $fLabels   = @(if ($FlagLabel)   { $FlagLabel   -split ',' | ForEach-Object { $_.Trim() } } else { @() })
+
+        for ($i = 0; $i -lt $fPatterns.Count; $i++) {
+            $vRule = if ($i -lt $fVersions.Count) { $fVersions[$i] } else { "*" }
+            $lbl   = if ($i -lt $fLabels.Count)   { $fLabels[$i] }   else { "" }
+            $flagRules.Add([PSCustomObject]@{
+                Pattern     = $fPatterns[$i]
+                VersionRule = $vRule
+                Label       = $lbl
+            })
+        }
+    }
+
+    return $flagRules
+}
+
+# Stringified version helpers for RunspacePool injection
+$script:VersionHelperString = @'
+function Compare-VersionStrings {
+    param([string]$Current, [string]$Target)
+    if (-not $Current -or -not $Target) { return -1 }
+    try {
+        $cParts = $Current -split '\.' | ForEach-Object { [int]$_ }
+        $tParts = $Target  -split '\.' | ForEach-Object { [int]$_ }
+        $maxLen = [Math]::Max($cParts.Count, $tParts.Count)
+        for ($i = 0; $i -lt $maxLen; $i++) {
+            $c = if ($i -lt $cParts.Count) { $cParts[$i] } else { 0 }
+            $t = if ($i -lt $tParts.Count) { $tParts[$i] } else { 0 }
+            if ($c -lt $t) { return -1 }
+            if ($c -gt $t) { return 1 }
+        }
+        return 0
+    }
+    catch { return -1 }
+}
+
+function Test-VersionAgainstRule {
+    param([string]$Version, [string]$Rule)
+    $Rule = $Rule.Trim()
+    if ($Rule -eq '*') { return $true }
+    if ([string]::IsNullOrWhiteSpace($Version)) { return $true }
+    $operator = ''
+    $threshold = ''
+    if ($Rule -match '^(LE|GE|NE|LT|GT|EQ)(.+)$') {
+        $opText    = $Matches[1].ToUpper()
+        $threshold = $Matches[2].Trim()
+        $operator  = switch ($opText) {
+            'LT' { '<'  }
+            'LE' { '<=' }
+            'GT' { '>'  }
+            'GE' { '>=' }
+            'EQ' { '='  }
+            'NE' { '!=' }
+        }
+    }
+    elseif ($Rule -match '^(<=|>=|!=|<|>|=)(.+)$') {
+        $operator  = $Matches[1]
+        $threshold = $Matches[2].Trim()
+    }
+    else {
+        $operator  = '<'
+        $threshold = $Rule
+    }
+    $cmp = Compare-VersionStrings -Current $Version -Target $threshold
+    switch ($operator) {
+        '<'  { return ($cmp -lt 0) }
+        '<=' { return ($cmp -le 0) }
+        '>'  { return ($cmp -gt 0) }
+        '>=' { return ($cmp -ge 0) }
+        '='  { return ($cmp -eq 0) }
+        '!=' { return ($cmp -ne 0) }
+        default { return $false }
+    }
+}
+
+function Get-VersionStatus {
+    param([string]$Version, [string]$Rule)
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        return "NO VERSION - FLAGGED (assume vulnerable)"
+    }
+    $isFlagged = Test-VersionAgainstRule -Version $Version -Rule $Rule
+    if ($isFlagged) {
+        return "*** FLAGGED *** (v$Version matches rule: $Rule)"
+    }
+    else {
+        return "OK (v$Version passes rule: $Rule)"
+    }
+}
+'@
+
+# ============================================================
+#  SOFTWARE ENUMERATION FUNCTIONS
+# ============================================================
+
+function Get-SoftwareFromRegistry {
+    <# Remote Registry method -- both Uninstall + WOW6432Node #>
+    param([string]$ComputerName)
+
+    $baseKeys = @(
+        'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+
+    $results = [System.Collections.Generic.List[PSObject]]::new()
+
+    foreach ($key in $baseKeys) {
+        try {
+            $reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $ComputerName)
+            $sub = $reg.OpenSubKey($key)
+            if ($null -eq $sub) { continue }
+
+            foreach ($name in $sub.GetSubKeyNames()) {
+                try {
+                    $app  = $sub.OpenSubKey($name)
+                    $disp = $app.GetValue("DisplayName")
+                    if ([string]::IsNullOrWhiteSpace($disp)) { continue }
+
+                    $results.Add([PSCustomObject]@{
+                        ComputerName   = $ComputerName
+                        Name           = $disp
+                        Version        = $app.GetValue("DisplayVersion")
+                        Publisher      = $app.GetValue("Publisher")
+                        InstallDate    = $app.GetValue("InstallDate")
+                        InstallPath    = $app.GetValue("InstallLocation")
+                        Architecture   = if ($key -like "*WOW6432*") { "x86" } else { "x64" }
+                        Source         = "Registry"
+                    })
+                }
+                catch { }
+            }
+            $reg.Close()
+        }
+        catch { }
+    }
+    return $results
+}
+
+function Get-SoftwareFromPSRemoting {
+    <# PSRemoting fallback -- reads registry locally via Invoke-Command #>
+    param([string]$ComputerName, [PSCredential]$Credential)
+
+    $results = [System.Collections.Generic.List[PSObject]]::new()
+
+    try {
+        $invokeParams = @{
+            ComputerName = $ComputerName
+            ErrorAction  = "Stop"
+            ScriptBlock  = {
+                $output = [System.Collections.Generic.List[PSObject]]::new()
+                $paths = @(
+                    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+                )
+                foreach ($path in $paths) {
+                    try {
+                        Get-ItemProperty $path -ErrorAction SilentlyContinue |
+                            Where-Object { $_.DisplayName } |
+                            ForEach-Object {
+                                $output.Add([PSCustomObject]@{
+                                    Name         = $_.DisplayName
+                                    Version      = $_.DisplayVersion
+                                    Publisher    = $_.Publisher
+                                    InstallDate  = $_.InstallDate
+                                    InstallPath  = $_.InstallLocation
+                                    Architecture = if ($path -like "*WOW6432*") { "x86" } else { "x64" }
+                                })
+                            }
+                    }
+                    catch { }
+                }
+                return $output
+            }
+        }
+        if ($Credential) { $invokeParams.Credential = $Credential }
+
+        $remote = Invoke-Command @invokeParams
+        foreach ($r in $remote) {
+            $results.Add([PSCustomObject]@{
+                ComputerName   = $ComputerName
+                Name           = $r.Name
+                Version        = $r.Version
+                Publisher      = $r.Publisher
+                InstallDate    = $r.InstallDate
+                InstallPath    = $r.InstallPath
+                Architecture   = $r.Architecture
+                Source         = "PSRemoting"
+            })
+        }
+    }
+    catch { }
+    return $results
+}
+
+function Get-SoftwareFromWMI {
+    <# WMI/CIM fallback -- Win32_Product (slow, last resort) #>
+    param([string]$ComputerName, [PSCredential]$Credential)
+
+    $results = [System.Collections.Generic.List[PSObject]]::new()
+
+    try {
+        $cimParams = @{
+            ComputerName = $ComputerName
+            ClassName    = "Win32_Product"
+            ErrorAction  = "Stop"
+        }
+        if ($Credential) { $cimParams.Credential = $Credential }
+
+        $products = Get-CimInstance @cimParams
+        foreach ($p in $products) {
+            if ([string]::IsNullOrWhiteSpace($p.Name)) { continue }
+            $results.Add([PSCustomObject]@{
+                ComputerName   = $ComputerName
+                Name           = $p.Name
+                Version        = $p.Version
+                Publisher      = $p.Vendor
+                InstallDate    = $p.InstallDate
+                InstallPath    = $p.InstallLocation
+                Architecture   = ""
+                Source         = "WMI"
+            })
+        }
+    }
+    catch { }
+    return $results
+}
+
+# Stringified software enumeration for RunspacePool injection
+$script:SoftwareHelperString = @'
+function Get-SoftwareFromRegistry {
+    param([string]$ComputerName)
+    $baseKeys = @(
+        'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $results = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($key in $baseKeys) {
+        try {
+            $reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $ComputerName)
+            $sub = $reg.OpenSubKey($key)
+            if ($null -eq $sub) { continue }
+            foreach ($name in $sub.GetSubKeyNames()) {
+                try {
+                    $app  = $sub.OpenSubKey($name)
+                    $disp = $app.GetValue("DisplayName")
+                    if ([string]::IsNullOrWhiteSpace($disp)) { continue }
+                    $results.Add([PSCustomObject]@{
+                        ComputerName   = $ComputerName
+                        Name           = $disp
+                        Version        = $app.GetValue("DisplayVersion")
+                        Publisher      = $app.GetValue("Publisher")
+                        InstallDate    = $app.GetValue("InstallDate")
+                        InstallPath    = $app.GetValue("InstallLocation")
+                        Architecture   = if ($key -like "*WOW6432*") { "x86" } else { "x64" }
+                        Source         = "Registry"
+                    })
+                }
+                catch { }
+            }
+            $reg.Close()
+        }
+        catch { }
+    }
+    return $results
+}
+
+function Get-SoftwareFromPSRemoting {
+    param([string]$ComputerName, [PSCredential]$Credential)
+    $results = [System.Collections.Generic.List[PSObject]]::new()
+    try {
+        $invokeParams = @{
+            ComputerName = $ComputerName
+            ErrorAction  = "Stop"
+            ScriptBlock  = {
+                $output = [System.Collections.Generic.List[PSObject]]::new()
+                $paths = @(
+                    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+                )
+                foreach ($path in $paths) {
+                    try {
+                        Get-ItemProperty $path -ErrorAction SilentlyContinue |
+                            Where-Object { $_.DisplayName } |
+                            ForEach-Object {
+                                $output.Add([PSCustomObject]@{
+                                    Name         = $_.DisplayName
+                                    Version      = $_.DisplayVersion
+                                    Publisher    = $_.Publisher
+                                    InstallDate  = $_.InstallDate
+                                    InstallPath  = $_.InstallLocation
+                                    Architecture = if ($path -like "*WOW6432*") { "x86" } else { "x64" }
+                                })
+                            }
+                    }
+                    catch { }
+                }
+                return $output
+            }
+        }
+        if ($Credential) { $invokeParams.Credential = $Credential }
+        $remote = Invoke-Command @invokeParams
+        foreach ($r in $remote) {
+            $results.Add([PSCustomObject]@{
+                ComputerName   = $ComputerName
+                Name           = $r.Name
+                Version        = $r.Version
+                Publisher      = $r.Publisher
+                InstallDate    = $r.InstallDate
+                InstallPath    = $r.InstallPath
+                Architecture   = $r.Architecture
+                Source         = "PSRemoting"
+            })
+        }
+    }
+    catch { }
+    return $results
+}
+
+function Get-SoftwareFromWMI {
+    param([string]$ComputerName, [PSCredential]$Credential)
+    $results = [System.Collections.Generic.List[PSObject]]::new()
+    try {
+        $cimParams = @{
+            ComputerName = $ComputerName
+            ClassName    = "Win32_Product"
+            ErrorAction  = "Stop"
+        }
+        if ($Credential) { $cimParams.Credential = $Credential }
+        $products = Get-CimInstance @cimParams
+        foreach ($p in $products) {
+            if ([string]::IsNullOrWhiteSpace($p.Name)) { continue }
+            $results.Add([PSCustomObject]@{
+                ComputerName   = $ComputerName
+                Name           = $p.Name
+                Version        = $p.Version
+                Publisher      = $p.Vendor
+                InstallDate    = $p.InstallDate
+                InstallPath    = $p.InstallLocation
+                Architecture   = ""
+                Source         = "WMI"
+            })
+        }
+    }
+    catch { }
+    return $results
 }
 '@
 
@@ -2130,6 +2669,335 @@ try {
 }
 
 # ============================================================
+#  SOFTWARE VERSION CHECK ENGINE
+# ============================================================
+
+function Invoke-SoftwareCheck {
+    <#
+    .SYNOPSIS
+        Enumerates installed software on Windows hosts and applies flag rules.
+        Returns findings in the same format as Invoke-PluginScan for merging.
+    #>
+    param(
+        [array]$Targets,         # Array of @{ IP; Hostname; OS; OpenPorts }
+        [array]$FlagRules,       # Array of @{ Pattern; VersionRule; Label }
+        [string[]]$SoftwareFilters,  # Wildcard patterns for inventory filtering
+        [int]$MaxThreads,
+        [PSCredential]$Credential,
+        [string]$OutDir
+    )
+
+    # Filter to Windows hosts only (by OS guess or port 445 open)
+    $windowsTargets = @($Targets | Where-Object {
+        ($_.OS -and $_.OS -like "*Windows*") -or
+        ($_.OpenPorts -and @($_.OpenPorts) -contains 445)
+    })
+
+    if ($windowsTargets.Count -eq 0) {
+        Write-Log "Software Check: No Windows hosts detected. Skipping." "WARN"
+        return @()
+    }
+
+    Write-Log "Software Check: $($windowsTargets.Count) Windows hosts, $($FlagRules.Count) flag rules"
+    if ($FlagRules.Count -gt 0) {
+        foreach ($rule in $FlagRules) {
+            $labelStr = if ($rule.Label) { " [$($rule.Label)]" } else { "" }
+            Write-Log "  Rule: $($rule.Pattern)  version: $($rule.VersionRule)$labelStr"
+        }
+    }
+
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, [Math]::Min($MaxThreads, 10))
+    $pool.Open()
+    $jobs = [System.Collections.ArrayList]::new()
+
+    foreach ($target in $windowsTargets) {
+        $ps = [PowerShell]::Create()
+        $ps.RunspacePool = $pool
+
+        [void]$ps.AddScript(@"
+$($script:SoftwareHelperString)
+$($script:VersionHelperString)
+
+param(`$IP, `$Hostname, `$FlagRulesJson, `$SoftwareFiltersJson, `$Cred)
+
+`$flagRules = @()
+if (`$FlagRulesJson) {
+    `$flagRules = `$FlagRulesJson | ConvertFrom-Json
+}
+`$softwareFilters = @()
+if (`$SoftwareFiltersJson) {
+    `$softwareFilters = `$SoftwareFiltersJson | ConvertFrom-Json
+}
+
+# Enumerate software: Registry -> PSRemoting -> WMI
+`$hostSoftware = @()
+`$method = "None"
+
+`$hostSoftware = @(Get-SoftwareFromRegistry -ComputerName `$IP)
+`$method = "Registry"
+
+if (`$hostSoftware.Count -eq 0) {
+    `$hostSoftware = @(Get-SoftwareFromPSRemoting -ComputerName `$IP -Credential `$Cred)
+    `$method = "PSRemoting"
+}
+
+if (`$hostSoftware.Count -eq 0) {
+    `$hostSoftware = @(Get-SoftwareFromWMI -ComputerName `$IP -Credential `$Cred)
+    `$method = "WMI"
+}
+
+# Deduplicate by Name+Version
+`$hostSoftware = @(`$hostSoftware | Sort-Object Name, Version -Unique)
+
+# Build results
+`$results = [System.Collections.Generic.List[PSObject]]::new()
+
+# Inventory entry (always return count)
+`$results.Add(@{
+    Type       = 'Inventory'
+    IP         = `$IP
+    Hostname   = `$Hostname
+    Method     = `$method
+    TotalCount = `$hostSoftware.Count
+    Software   = `$hostSoftware
+})
+
+# Apply flag rules
+foreach (`$rule in `$flagRules) {
+    `$matching = @(`$hostSoftware | Where-Object { `$_.Name -like `$rule.Pattern })
+    foreach (`$sw in `$matching) {
+        `$isFlagged = Test-VersionAgainstRule -Version `$sw.Version -Rule `$rule.VersionRule
+        `$statusMsg = Get-VersionStatus -Version `$sw.Version -Rule `$rule.VersionRule
+        `$results.Add(@{
+            Type        = 'FlagResult'
+            IP          = `$IP
+            Hostname    = `$Hostname
+            SoftwareName = `$sw.Name
+            Version     = `$sw.Version
+            Architecture = `$sw.Architecture
+            InstallPath = `$sw.InstallPath
+            Publisher   = `$sw.Publisher
+            FlagPattern = `$rule.Pattern
+            FlagRule    = `$rule.VersionRule
+            FlagLabel   = `$rule.Label
+            IsFlagged   = `$isFlagged
+            StatusMsg   = `$statusMsg
+            Method      = `$method
+        })
+    }
+}
+
+return `$results
+"@)
+        # Pass arguments via AddArgument (credentials as live objects)
+        [void]$ps.AddArgument($target.IP)
+        [void]$ps.AddArgument($target.Hostname)
+        [void]$ps.AddArgument(($FlagRules | ConvertTo-Json -Compress -Depth 3))
+        [void]$ps.AddArgument(($SoftwareFilters | ConvertTo-Json -Compress -Depth 3))
+        [void]$ps.AddArgument($Credential)
+
+        $handle = $ps.BeginInvoke()
+        [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle; IP = $target.IP; Hostname = $target.Hostname })
+    }
+
+    # Collect results with real-time output
+    $allInventory = [System.Collections.Generic.List[PSObject]]::new()
+    $allFlagged = [System.Collections.Generic.List[PSObject]]::new()
+    $allFlagResults = [System.Collections.Generic.List[PSObject]]::new()
+    $findings = [System.Collections.ArrayList]::new()
+    $completed = 0
+    $total = $jobs.Count
+    $pending = [System.Collections.ArrayList]::new($jobs)
+    $spinChars = @('|', '/', '-', '\')
+    $spinIdx = 0
+    $startTime = [DateTime]::Now
+
+    while ($pending.Count -gt 0) {
+        for ($i = $pending.Count - 1; $i -ge 0; $i--) {
+            $job = $pending[$i]
+            if ($job.Handle.IsCompleted) {
+                Write-Host "`r                                                                        `r" -NoNewline
+                try {
+                    $output = $job.PowerShell.EndInvoke($job.Handle)
+                    if ($output) {
+                        foreach ($item in $output) {
+                            if ($item.Type -eq 'Inventory') {
+                                $allInventory.Add($item)
+                                $completed++
+                                $color = if ($item.TotalCount -gt 0) { "Gray" } else { "DarkYellow" }
+                                $countStr = if ($item.TotalCount -gt 0) { "$($item.TotalCount) apps via $($item.Method)" } else { "no software retrieved" }
+                                Write-Host ("  [{0}/{1}] {2} ({3}) -- {4}" -f $completed, $total, $item.IP, $item.Hostname, $countStr) -ForegroundColor $color
+                                Write-Log "SoftwareCheck $($item.IP) ($($item.Hostname)) -- $countStr" "INFO"
+                            }
+                            elseif ($item.Type -eq 'FlagResult') {
+                                $allFlagResults.Add($item)
+                                if ($item.IsFlagged) {
+                                    $allFlagged.Add($item)
+                                    $labelStr = if ($item.FlagLabel) { " [$($item.FlagLabel)]" } else { "" }
+                                    Write-Host ("    *** FLAGGED *** {0} -- {1} v{2} ({3}){4}" -f $item.IP, $item.SoftwareName, $item.Version, $item.FlagRule, $labelStr) -ForegroundColor Red
+                                    Write-Log "FLAGGED $($item.IP) -- $($item.SoftwareName) v$($item.Version) ($($item.FlagRule))$labelStr" "WARN"
+
+                                    # Add as a finding for merging with plugin results
+                                    [void]$findings.Add(@{
+                                        IP         = $item.IP
+                                        Port       = '0'
+                                        Hostname   = $item.Hostname
+                                        PluginName = 'SoftwareVersionCheck'
+                                        Result     = 'Vulnerable'
+                                        Detail     = "$($item.SoftwareName) v$($item.Version) -- $($item.StatusMsg)$labelStr"
+                                    })
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    $completed++
+                    Write-Host ("  [{0}/{1}] {2} -- Error: {3}" -f $completed, $total, $job.IP, $_.Exception.Message) -ForegroundColor Red
+                }
+                $job.PowerShell.Dispose()
+                $pending.RemoveAt($i)
+            }
+        }
+        if ($pending.Count -gt 0) {
+            $elapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+            $spin = $spinChars[$spinIdx % $spinChars.Count]
+            $spinIdx++
+            Write-Host ("`r  $spin  [{0}/{1} complete] {2} hosts scanning... elapsed {3}   " -f $completed, $total, $pending.Count, $elapsed) -NoNewline -ForegroundColor Yellow
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    Write-Host "`r                                                                        `r" -NoNewline
+
+    $pool.Close()
+    $pool.Dispose()
+
+    # Summary
+    $flaggedCount = $allFlagged.Count
+    $okCount = ($allFlagResults | Where-Object { -not $_.IsFlagged }).Count
+    $totalElapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+    Write-Host "  Software Check complete: $($windowsTargets.Count) hosts scanned, $flaggedCount flagged, $okCount OK in $totalElapsed." -ForegroundColor Green
+    Write-Log "Software Check complete: $($windowsTargets.Count) hosts, $flaggedCount flagged, $okCount OK"
+
+    # Export software-specific outputs
+    if ($OutDir) {
+        Export-SoftwareOutputs -AllInventory $allInventory -AllFlagged $allFlagged `
+                               -AllFlagResults $allFlagResults -FlagRules $FlagRules `
+                               -SoftwareFilters $SoftwareFilters -OutDir $OutDir
+    }
+
+    return $findings
+}
+
+# ============================================================
+#  SOFTWARE-SPECIFIC OUTPUT FUNCTIONS
+# ============================================================
+
+function Export-SoftwareOutputs {
+    param(
+        [System.Collections.Generic.List[PSObject]]$AllInventory,
+        [System.Collections.Generic.List[PSObject]]$AllFlagged,
+        [System.Collections.Generic.List[PSObject]]$AllFlagResults,
+        [array]$FlagRules,
+        [string[]]$SoftwareFilters,
+        [string]$OutDir
+    )
+
+    $ts = $script:Timestamp
+
+    # Full software inventory CSV
+    $allSoftware = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($inv in $AllInventory) {
+        if ($inv.Software) {
+            foreach ($sw in $inv.Software) { $allSoftware.Add($sw) }
+        }
+    }
+
+    if ($allSoftware.Count -gt 0) {
+        $invPath = Join-Path $OutDir "SoftwareInventory_ALL_$ts.csv"
+        $allSoftware | Sort-Object ComputerName, Name |
+            Select-Object ComputerName, Name, Version, Publisher, InstallDate, InstallPath, Architecture, Source |
+            Export-Csv -Path $invPath -NoTypeInformation -Encoding UTF8
+        Write-Log "Software inventory: $invPath ($($allSoftware.Count) entries)"
+
+        # Filtered inventory
+        if ($SoftwareFilters -and $SoftwareFilters.Count -gt 0) {
+            $filtered = $allSoftware | Where-Object {
+                $name = $_.Name
+                $matchesAny = $false
+                foreach ($f in $SoftwareFilters) {
+                    if ($name -like $f) { $matchesAny = $true; break }
+                }
+                $matchesAny
+            }
+            if ($filtered) {
+                $filtPath = Join-Path $OutDir "SoftwareInventory_FILTERED_$ts.csv"
+                @($filtered) | Sort-Object ComputerName, Name, Version |
+                    Select-Object ComputerName, Name, Version, Publisher, InstallDate, InstallPath, Architecture, Source |
+                    Export-Csv -Path $filtPath -NoTypeInformation -Encoding UTF8
+                Write-Log "Filtered software inventory: $filtPath ($(@($filtered).Count) entries)"
+            }
+        }
+    }
+
+    # Flagged software outputs
+    if ($AllFlagged.Count -gt 0) {
+        # Master flagged CSV
+        $masterFlagPath = Join-Path $OutDir "FLAGGED_ALL_TARGETS_$ts.csv"
+        $flaggedRows = $AllFlagged | ForEach-Object {
+            [PSCustomObject]@{
+                ComputerName = $_.IP
+                Hostname     = $_.Hostname
+                SoftwareName = $_.SoftwareName
+                Version      = $_.Version
+                Architecture = $_.Architecture
+                InstallPath  = $_.InstallPath
+                FlagRule     = $_.FlagRule
+                FlagPattern  = $_.FlagPattern
+                FlagLabel    = $_.FlagLabel
+                Status       = "FLAGGED"
+            }
+        }
+        $flaggedRows | Sort-Object FlagPattern, ComputerName, SoftwareName |
+            Export-Csv -Path $masterFlagPath -NoTypeInformation -Encoding UTF8
+        Write-Log "Master flagged CSV: $masterFlagPath ($($AllFlagged.Count) entries)"
+
+        # Master flagged IP list
+        $masterIpPath = Join-Path $OutDir "FLAGGED_ALL_IPs_$ts.txt"
+        ($AllFlagged | Select-Object -ExpandProperty IP -Unique) |
+            Out-File -FilePath $masterIpPath -Encoding UTF8
+        Write-Log "Master flagged IPs: $masterIpPath"
+
+        # Per-rule CSVs
+        $ruleGroups = $AllFlagged | Group-Object { "$($_.FlagPattern)|$($_.FlagRule)" }
+        foreach ($rg in $ruleGroups) {
+            $firstEntry = $rg.Group | Select-Object -First 1
+            $safeName = ($firstEntry.FlagPattern -replace '[\\/*?<>|":]','_' -replace '^\*','').Trim('_*. ')
+            if (-not $safeName) { $safeName = "rule" }
+
+            $rulePath = Join-Path $OutDir "FLAGGED_${safeName}_TARGETS_$ts.csv"
+            $rg.Group | ForEach-Object {
+                [PSCustomObject]@{
+                    ComputerName = $_.IP
+                    Hostname     = $_.Hostname
+                    SoftwareName = $_.SoftwareName
+                    Version      = $_.Version
+                    Architecture = $_.Architecture
+                    InstallPath  = $_.InstallPath
+                    FlagRule     = $_.FlagRule
+                    FlagLabel    = $_.FlagLabel
+                }
+            } | Export-Csv -Path $rulePath -NoTypeInformation -Encoding UTF8
+
+            $ruleIpPath = Join-Path $OutDir "FLAGGED_${safeName}_IPs_$ts.txt"
+            ($rg.Group | Select-Object -ExpandProperty IP -Unique) |
+                Out-File -FilePath $ruleIpPath -Encoding UTF8
+
+            Write-Log "Per-rule CSV: $rulePath ($($rg.Count) entries)"
+        }
+    }
+}
+
+# ============================================================
 #  OUTPUT GENERATORS
 # ============================================================
 
@@ -2349,7 +3217,11 @@ function Invoke-ScanMode {
         [int]$Threads,
         [int]$Timeout,
         [int[]]$PortList,
-        [string]$OutDir
+        [string]$OutDir,
+        [switch]$SoftwareCheckEnabled,
+        [array]$FlagRules,
+        [string[]]$SoftwareFilters,
+        [PSCredential]$Credential
     )
 
     Write-Section "PHASE 1: Host Discovery"
@@ -2389,13 +3261,32 @@ function Invoke-ScanMode {
         }
     }
 
-    Write-Section "PHASE 2: Vulnerability Scanning"
+    # Phase 2: Software Version Check (conditional)
+    $softwareFindings = @()
+    if ($SoftwareCheckEnabled) {
+        Write-Section "PHASE 2: Software Version Check"
+        $softwareFindings = @(Invoke-SoftwareCheck -Targets $targets -FlagRules $FlagRules `
+                                                   -SoftwareFilters $SoftwareFilters `
+                                                   -MaxThreads $Threads -Credential $Credential `
+                                                   -OutDir $OutDir)
+    }
 
-    $findings = Invoke-PluginScan -Targets $targets -SelectedPlugins $SelectedPlugins `
-                                  -MaxThreads $Threads -TimeoutMs $Timeout
+    # Phase 3: Vulnerability Scanning (plugin-based)
+    $phaseNum = if ($SoftwareCheckEnabled) { 3 } else { 2 }
+    if ($SelectedPlugins.Count -gt 0) {
+        Write-Section "PHASE ${phaseNum}: Vulnerability Scanning"
+        $findings = Invoke-PluginScan -Targets $targets -SelectedPlugins $SelectedPlugins `
+                                      -MaxThreads $Threads -TimeoutMs $Timeout
+    } else {
+        $findings = @()
+    }
 
-    Write-Section "PHASE 3: Output"
-    Export-Results -Findings $findings -SelectedOutputs $SelectedOutputs -OutDir $OutDir -Mode "Network Scan"
+    # Merge software findings with plugin findings
+    $allFindings = @($softwareFindings) + @($findings)
+
+    $outputPhase = $phaseNum + 1
+    Write-Section "PHASE ${outputPhase}: Output"
+    Export-Results -Findings $allFindings -SelectedOutputs $SelectedOutputs -OutDir $OutDir -Mode "Network Scan"
 }
 
 # ============================================================
@@ -2410,7 +3301,11 @@ function Invoke-ListMode {
         [int]$Threads,
         [int]$Timeout,
         [int[]]$PortList,
-        [string]$OutDir
+        [string]$OutDir,
+        [switch]$SoftwareCheckEnabled,
+        [array]$FlagRules,
+        [string[]]$SoftwareFilters,
+        [PSCredential]$Credential
     )
 
     Write-Section "PHASE 1: Loading Host List + Port Discovery"
@@ -2445,13 +3340,32 @@ function Invoke-ListMode {
         }
     }
 
-    Write-Section "PHASE 2: Vulnerability Scanning"
+    # Phase 2: Software Version Check (conditional)
+    $softwareFindings = @()
+    if ($SoftwareCheckEnabled) {
+        Write-Section "PHASE 2: Software Version Check"
+        $softwareFindings = @(Invoke-SoftwareCheck -Targets $targets -FlagRules $FlagRules `
+                                                   -SoftwareFilters $SoftwareFilters `
+                                                   -MaxThreads $Threads -Credential $Credential `
+                                                   -OutDir $OutDir)
+    }
 
-    $findings = Invoke-PluginScan -Targets $targets -SelectedPlugins $SelectedPlugins `
-                                  -MaxThreads $Threads -TimeoutMs $Timeout
+    # Phase 3: Vulnerability Scanning (plugin-based)
+    $phaseNum = if ($SoftwareCheckEnabled) { 3 } else { 2 }
+    if ($SelectedPlugins.Count -gt 0) {
+        Write-Section "PHASE ${phaseNum}: Vulnerability Scanning"
+        $findings = Invoke-PluginScan -Targets $targets -SelectedPlugins $SelectedPlugins `
+                                      -MaxThreads $Threads -TimeoutMs $Timeout
+    } else {
+        $findings = @()
+    }
 
-    Write-Section "PHASE 3: Output"
-    Export-Results -Findings $findings -SelectedOutputs $SelectedOutputs -OutDir $OutDir -Mode "List Scan"
+    # Merge software findings with plugin findings
+    $allFindings = @($softwareFindings) + @($findings)
+
+    $outputPhase = $phaseNum + 1
+    Write-Section "PHASE ${outputPhase}: Output"
+    Export-Results -Findings $allFindings -SelectedOutputs $SelectedOutputs -OutDir $OutDir -Mode "List Scan"
 }
 
 # ============================================================
@@ -2636,16 +3550,51 @@ if ($Validate) { $mode = "Validate" }
 if ($mode -and $NoMenu) {
     # --- Plugin selection (CLI) ---
     $selectedPlugins = @()
+    $softwareCheckEnabled = $false
     if ($Plugins) {
         $pluginNames = $Plugins -split ',' | ForEach-Object { $_.Trim() }
+        # Check for SoftwareVersionCheck in plugin list
+        if ($pluginNames -contains 'SoftwareVersionCheck') {
+            $softwareCheckEnabled = $true
+            $pluginNames = @($pluginNames | Where-Object { $_ -ne 'SoftwareVersionCheck' })
+        }
         $selectedPlugins = $script:Validators | Where-Object { $pluginNames -contains $_.Name }
     } else {
         $selectedPlugins = $script:Validators
     }
 
-    if ($selectedPlugins.Count -eq 0) {
+    # Auto-enable software check if flag parameters provided
+    if ($FlagFilter -or $FlagFilterFile) {
+        $softwareCheckEnabled = $true
+    }
+
+    if ($selectedPlugins.Count -eq 0 -and -not $softwareCheckEnabled) {
         Write-Log "No plugins selected." "ERROR"
         exit 1
+    }
+
+    # --- Parse flag rules (CLI) ---
+    $cliFlagRules = @()
+    if ($softwareCheckEnabled) {
+        $cliFlagRules = @(Import-FlagRules -FlagFilter $FlagFilter -FlagVersion $FlagVersion `
+                                           -FlagLabel $FlagLabel -FlagFilterFile $FlagFilterFile)
+        if ($cliFlagRules.Count -gt 0) {
+            Write-Log "Flag rules ($($cliFlagRules.Count)):"
+            foreach ($rule in $cliFlagRules) {
+                $labelStr = if ($rule.Label) { " [$($rule.Label)]" } else { "" }
+                Write-Log "  $($rule.Pattern)  version: $($rule.VersionRule)$labelStr"
+            }
+        }
+    }
+
+    # --- Parse software filters (CLI) ---
+    $cliSoftwareFilters = @()
+    if ($SoftwareFilter) {
+        $cliSoftwareFilters = @($SoftwareFilter -split ',' | ForEach-Object { $_.Trim() })
+    }
+    if ($SoftwareFilterFile -and (Test-Path $SoftwareFilterFile)) {
+        $fileFilters = @(Get-Content $SoftwareFilterFile | Where-Object { $_.Trim() -ne "" -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() })
+        $cliSoftwareFilters = @($cliSoftwareFilters) + @($fileFilters)
     }
 
     # --- Output selection (CLI) ---
@@ -2657,7 +3606,9 @@ if ($mode -and $NoMenu) {
     }
 
     Write-Log "Mode: $mode"
-    Write-Log ("Plugins: {0}" -f (($selectedPlugins | ForEach-Object { $_.Name }) -join ', '))
+    $pluginDisplay = @($selectedPlugins | ForEach-Object { $_.Name })
+    if ($softwareCheckEnabled) { $pluginDisplay = @("SoftwareVersionCheck") + $pluginDisplay }
+    Write-Log ("Plugins: {0}" -f ($pluginDisplay -join ', '))
 
     # --- Mode-specific input gathering and execution (CLI) ---
     switch ($mode) {
@@ -2678,7 +3629,10 @@ if ($mode -and $NoMenu) {
             Save-Config
             Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
                             -SelectedOutputs $selectedOutputs -Threads $threads `
-                            -Timeout $timeout -PortList $portList -OutDir $outDir
+                            -Timeout $timeout -PortList $portList -OutDir $outDir `
+                            -SoftwareCheckEnabled:$softwareCheckEnabled `
+                            -FlagRules $cliFlagRules -SoftwareFilters $cliSoftwareFilters `
+                            -Credential $Credential
         }
         "List" {
             if (-not $HostFile -or -not (Test-Path $HostFile)) {
@@ -2690,7 +3644,10 @@ if ($mode -and $NoMenu) {
             Save-Config
             Invoke-ListMode -HostFilePath $HostFile -SelectedPlugins $selectedPlugins `
                             -SelectedOutputs $selectedOutputs -Threads $threads `
-                            -Timeout $timeout -PortList $portList -OutDir $outDir
+                            -Timeout $timeout -PortList $portList -OutDir $outDir `
+                            -SoftwareCheckEnabled:$softwareCheckEnabled `
+                            -FlagRules $cliFlagRules -SoftwareFilters $cliSoftwareFilters `
+                            -Credential $Credential
         }
         "Validate" {
             if (-not $InputCSV -or -not (Test-Path $InputCSV)) {
@@ -2716,22 +3673,26 @@ if ($mode -and $NoMenu) {
 # ============================================================
 #  INTERACTIVE PATH - State Machine with Back-Navigation
 # ============================================================
-#  Step 1: Mode select          -> Esc = exit
-#  Step 2: Plugin select        -> Esc = back to 1
-#  Step 3: Output select        -> Esc = back to 2
-#  Step 4: Settings             -> Esc = back to 3
-#  Step 5: Mode-specific input  -> Esc = back to 4
-#  Step 6: Confirmation screen  -> Esc = back to 5, Enter = execute
+#  Step 1: Mode select               -> Esc = exit
+#  Step 2: Plugin select             -> Esc = back to 1
+#  Step 3: Flag rules config (cond.) -> Esc = back to 2
+#  Step 4: Output select             -> Esc = back to 3 (or 2)
+#  Step 5: Settings                  -> Esc = back to 4
+#  Step 6: Mode-specific input       -> Esc = back to 5
+#  Step 7: Confirmation screen       -> Esc = back to 6, Enter = execute
 # ============================================================
 
 $step = 1
 # Accumulate selections across steps so back-navigation preserves choices
-$selectedMode    = $mode  # may be pre-set from CLI flag without -NoMenu
-$selectedPlugins = @()
-$selectedOutputs = @()
-$modeInputData   = $null
+$selectedMode         = $mode  # may be pre-set from CLI flag without -NoMenu
+$selectedPlugins      = @()
+$selectedOutputs      = @()
+$modeInputData        = $null
+$softwareCheckEnabled = $false
+$interactiveFlagRules = @()
+$interactiveSoftwareFilters = @()
 
-while ($step -ge 1 -and $step -le 6) {
+while ($step -ge 1 -and $step -le 7) {
 
     switch ($step) {
 
@@ -2765,24 +3726,37 @@ while ($step -ge 1 -and $step -le 6) {
             }
             $selectedMode = $modeResult | Select-Object -First 1
             if (-not $selectedMode) {
-                # Nothing selected (shouldn't happen with SingleSelect, but be safe)
                 continue
             }
             Update-ConfigValue "LastMode" $selectedMode
             $step = 2
         }
 
-        # ---- STEP 2: Plugin Selection ----
+        # ---- STEP 2: Plugin Selection (with Software Version Check) ----
         2 {
             if ($Plugins) {
                 # CLI plugin filter active -- skip menu
                 $pluginNames = $Plugins -split ',' | ForEach-Object { $_.Trim() }
+                if ($pluginNames -contains 'SoftwareVersionCheck') {
+                    $softwareCheckEnabled = $true
+                    $pluginNames = @($pluginNames | Where-Object { $_ -ne 'SoftwareVersionCheck' })
+                }
                 $selectedPlugins = $script:Validators | Where-Object { $pluginNames -contains $_.Name }
                 $step = 3
                 continue
             }
 
-            $pluginItems = $script:Validators | ForEach-Object {
+            # Build plugin menu items -- prepend Software Version Check
+            $swCheckDefault = ($script:Config.DefaultPlugins -contains "__SoftwareVersionCheck__")
+            $pluginItems = @(
+                @{
+                    Name        = "Software Version Check"
+                    Value       = "__SoftwareVersionCheck__"
+                    Selected    = $swCheckDefault
+                    Description = "Inventory software on Windows hosts, flag vulnerable versions"
+                }
+            )
+            $pluginItems += @($script:Validators | ForEach-Object {
                 $isDefault = ($script:Config.DefaultPlugins.Count -eq 0) -or ($script:Config.DefaultPlugins -contains $_.Name)
                 @{
                     Name        = $_.Name
@@ -2790,28 +3764,149 @@ while ($step -ge 1 -and $step -le 6) {
                     Selected    = $isDefault
                     Description = $_.Description
                 }
-            }
+            })
             $selectedNames = Show-InteractiveMenu -Title "Which plugins to run?" -Items $pluginItems -AllowSelectAll
             if ($null -eq $selectedNames) {
                 # Back to mode select
-                if (-not $mode) { $selectedMode = "" }  # only clear if mode wasn't CLI-specified
+                if (-not $mode) { $selectedMode = "" }
                 $step = 1
                 continue
             }
-            $selectedPlugins = $script:Validators | Where-Object { $selectedNames -contains $_.Name }
-            if ($selectedPlugins.Count -eq 0) {
+
+            # Separate software check from real plugins
+            $softwareCheckEnabled = ($selectedNames -contains "__SoftwareVersionCheck__")
+            $realPluginNames = @($selectedNames | Where-Object { $_ -ne "__SoftwareVersionCheck__" })
+            $selectedPlugins = $script:Validators | Where-Object { $realPluginNames -contains $_.Name }
+
+            if ($selectedPlugins.Count -eq 0 -and -not $softwareCheckEnabled) {
                 Write-Host "  No plugins selected. Select at least one." -ForegroundColor Red
                 continue  # re-show step 2
             }
-            Update-ConfigValue "DefaultPlugins" @($selectedPlugins | ForEach-Object { $_.Name })
+
+            $persistNames = @($realPluginNames)
+            if ($softwareCheckEnabled) { $persistNames = @("__SoftwareVersionCheck__") + $persistNames }
+            Update-ConfigValue "DefaultPlugins" $persistNames
             $step = 3
         }
 
-        # ---- STEP 3: Output Selection ----
+        # ---- STEP 3: Flag Rules Configuration (conditional) ----
         3 {
+            # Only show if Software Version Check is selected AND mode is not Validate
+            if (-not $softwareCheckEnabled -or $selectedMode -eq "Validate") {
+                # Auto-skip -- nothing to configure
+                $step = 4
+                continue
+            }
+
+            # If CLI flag params provided, use those
+            if ($FlagFilter -or $FlagFilterFile) {
+                $interactiveFlagRules = @(Import-FlagRules -FlagFilter $FlagFilter -FlagVersion $FlagVersion `
+                                                            -FlagLabel $FlagLabel -FlagFilterFile $FlagFilterFile)
+                if ($SoftwareFilter) {
+                    $interactiveSoftwareFilters = @($SoftwareFilter -split ',' | ForEach-Object { $_.Trim() })
+                }
+                if ($SoftwareFilterFile -and (Test-Path $SoftwareFilterFile)) {
+                    $fileFilters = @(Get-Content $SoftwareFilterFile | Where-Object { $_.Trim() -ne "" -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() })
+                    $interactiveSoftwareFilters = @($interactiveSoftwareFilters) + @($fileFilters)
+                }
+                $step = 4
+                continue
+            }
+
+            # Interactive flag rules configuration
+            $flagConfigItems = @(
+                @{ Name = "Load rules from file";  Value = "file";  Selected = $false; Description = "CSV with pattern,version_rule,label per line" }
+                @{ Name = "Enter rules manually";  Value = "manual"; Selected = $false; Description = "Type patterns and version thresholds" }
+            )
+
+            # Check for saved rules
+            $savedRules = @()
+            if ($script:Config.PSObject.Properties.Name -contains 'SavedFlagRules' -and $script:Config.SavedFlagRules.Count -gt 0) {
+                $savedRules = @($script:Config.SavedFlagRules)
+                $savedPreview = ($savedRules | Select-Object -First 2 | ForEach-Object { "$($_.Pattern) $($_.VersionRule)" }) -join '; '
+                if ($savedRules.Count -gt 2) { $savedPreview += " (+$($savedRules.Count - 2) more)" }
+                $flagConfigItems += @{
+                    Name = "Use saved rules ($($savedRules.Count))"; Value = "saved"; Selected = $false
+                    Description = $savedPreview
+                }
+            }
+
+            $flagConfigItems += @{
+                Name = "Skip (no flag rules)"; Value = "skip"; Selected = $true
+                Description = "Run software inventory only, no version flagging"
+            }
+
+            $flagChoice = Show-InteractiveMenu -Title "Software Version Check -- Flag rules:" `
+                                               -Items $flagConfigItems -SingleSelect
+            if ($null -eq $flagChoice) {
+                $step = 2
+                continue
+            }
+
+            $flagPicked = $flagChoice | Select-Object -First 1
+
+            switch ($flagPicked) {
+                "file" {
+                    $flagHistory = Get-InputHistory -HistoryKey "FlagRuleFileHistory"
+                    $flagFilePath = Show-FilePrompt -Title "Flag rules CSV file:" `
+                                                    -History $flagHistory `
+                                                    -Filter "CSV files (*.csv)|*.csv|Text files (*.txt)|*.txt|All files (*.*)|*.*" `
+                                                    -TypePrompt "Type the full file path:" `
+                                                    -MustExist
+                    if (-not $flagFilePath) {
+                        continue  # re-show step 3
+                    }
+                    Push-InputHistory "FlagRuleFileHistory" $flagFilePath
+                    $interactiveFlagRules = @(Import-FlagRules -FlagFilterFile $flagFilePath)
+                    if ($interactiveFlagRules.Count -eq 0) {
+                        Write-Host "  No valid rules found in $flagFilePath" -ForegroundColor Red
+                        continue
+                    }
+                }
+                "manual" {
+                    # Prompt for patterns
+                    $patternStr = Show-TextPrompt -Prompt "Software patterns (comma-separated wildcards, e.g. *notepad*,*putty*):" `
+                                                  -LastValue ($script:Config.LastSoftwareFilter)
+                    if ([string]::IsNullOrWhiteSpace($patternStr)) { continue }
+
+                    $versionStr = Show-TextPrompt -Prompt "Version rules (positional, e.g. LT8.9.1,LT0.82  or * for any):" `
+                                                  -Default "*"
+                    $labelStr = Show-TextPrompt -Prompt "Labels (optional, e.g. CVE-2025-15556,CVE-2024-31497):" `
+                                                -Default ""
+
+                    $interactiveFlagRules = @(Import-FlagRules -FlagFilter $patternStr -FlagVersion $versionStr -FlagLabel $labelStr)
+                    Update-ConfigValue "LastSoftwareFilter" $patternStr
+                }
+                "saved" {
+                    $interactiveFlagRules = @($savedRules | ForEach-Object {
+                        [PSCustomObject]@{
+                            Pattern     = $_.Pattern
+                            VersionRule = $_.VersionRule
+                            Label       = $_.Label
+                        }
+                    })
+                }
+                "skip" {
+                    $interactiveFlagRules = @()
+                }
+            }
+
+            # Save rules to config for next time
+            if ($interactiveFlagRules.Count -gt 0) {
+                $rulesToSave = @($interactiveFlagRules | ForEach-Object {
+                    @{ Pattern = $_.Pattern; VersionRule = $_.VersionRule; Label = $_.Label }
+                })
+                Update-ConfigValue "SavedFlagRules" $rulesToSave
+            }
+
+            $step = 4
+        }
+
+        # ---- STEP 4: Output Selection ----
+        4 {
             if ($Outputs) {
                 $selectedOutputs = $Outputs -split ',' | ForEach-Object { $_.Trim() }
-                $step = 4
+                $step = 5
                 continue
             }
 
@@ -2823,20 +3918,21 @@ while ($step -ge 1 -and $step -le 6) {
             )
             $outputResult = Show-InteractiveMenu -Title "Output options:" -Items $outputItems -AllowSelectAll
             if ($null -eq $outputResult) {
-                $step = 2
+                # Back to step 3 if software check enabled, else step 2
+                $step = if ($softwareCheckEnabled -and $selectedMode -ne "Validate") { 3 } else { 2 }
                 continue
             }
             $selectedOutputs = @($outputResult)
             Update-ConfigValue "DefaultOutputs" $selectedOutputs
             Update-ConfigValue "LastOutputDir" $outDir
-            $step = 4
+            $step = 5
         }
 
-        # ---- STEP 4: Settings (threads/timeout/ports) ----
-        4 {
+        # ---- STEP 5: Settings (threads/timeout/ports) ----
+        5 {
             $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr
             if ($null -eq $settingsResult) {
-                $step = 3
+                $step = 4
                 continue
             }
             $threads = $settingsResult.Threads
@@ -2845,11 +3941,11 @@ while ($step -ge 1 -and $step -le 6) {
             Update-ConfigValue "DefaultThreads" $threads
             Update-ConfigValue "DefaultTimeoutMs" $timeout
             Update-ConfigValue "DefaultPorts" $portStr
-            $step = 5
+            $step = 6
         }
 
-        # ---- STEP 5: Mode-Specific Input ----
-        5 {
+        # ---- STEP 6: Mode-Specific Input ----
+        6 {
             # Check if CLI already provided the needed input
             $cliInputProvided = $false
             switch ($selectedMode) {
@@ -2879,13 +3975,13 @@ while ($step -ge 1 -and $step -le 6) {
                     "List"     { $modeInputData = @{ HostFile = $HostFile } }
                     "Validate" { $modeInputData = @{ CSVPath = $InputCSV } }
                 }
-                $step = 6
+                $step = 7
                 continue
             }
 
             $modeInputData = Get-ModeInput -Mode $selectedMode -Config $script:Config
             if ($null -eq $modeInputData) {
-                $step = 4
+                $step = 5
                 continue
             }
 
@@ -2909,11 +4005,11 @@ while ($step -ge 1 -and $step -le 6) {
                     Update-ConfigValue "LastInputCSV" $modeInputData.CSVPath
                 }
             }
-            $step = 6
+            $step = 7
         }
 
-        # ---- STEP 6: Confirmation Screen ----
-        6 {
+        # ---- STEP 7: Confirmation Screen ----
+        7 {
             # Build input detail string for display
             $inputDetail = ""
             switch ($selectedMode) {
@@ -2926,17 +4022,37 @@ while ($step -ge 1 -and $step -le 6) {
                 "Validate" { $inputDetail = $modeInputData.CSVPath }
             }
 
+            # Build plugin names for display
+            $confirmPluginNames = @($selectedPlugins | ForEach-Object { $_.Name })
+            if ($softwareCheckEnabled) {
+                $confirmPluginNames = @("Software Version Check") + $confirmPluginNames
+            }
+
+            # Build software check detail for confirmation
+            $swCheckDetail = ""
+            if ($softwareCheckEnabled -and $interactiveFlagRules.Count -gt 0) {
+                $rulePreview = ($interactiveFlagRules | Select-Object -First 3 | ForEach-Object {
+                    $lbl = if ($_.Label) { " [$($_.Label)]" } else { "" }
+                    "$($_.Pattern) $($_.VersionRule)$lbl"
+                }) -join '; '
+                if ($interactiveFlagRules.Count -gt 3) { $rulePreview += " (+$($interactiveFlagRules.Count - 3) more)" }
+                $swCheckDetail = "$($interactiveFlagRules.Count) rule(s): $rulePreview"
+            } elseif ($softwareCheckEnabled) {
+                $swCheckDetail = "Inventory only (no flag rules)"
+            }
+
             $confirmed = Show-ConfirmationScreen `
                 -Mode $selectedMode `
-                -PluginNames @($selectedPlugins | ForEach-Object { $_.Name }) `
+                -PluginNames $confirmPluginNames `
                 -OutputNames $selectedOutputs `
                 -Threads $threads `
                 -Timeout $timeout `
                 -Ports $portStr `
-                -InputDetail $inputDetail
+                -InputDetail $inputDetail `
+                -SoftwareCheckDetail $swCheckDetail
 
             if (-not $confirmed) {
-                $step = 5
+                $step = 6
                 continue
             }
 
@@ -2947,7 +4063,16 @@ while ($step -ge 1 -and $step -le 6) {
             }
             Write-Banner
             Write-Log "Mode: $selectedMode"
-            Write-Log ("Plugins: {0}" -f (($selectedPlugins | ForEach-Object { $_.Name }) -join ', '))
+            $logPlugins = @($selectedPlugins | ForEach-Object { $_.Name })
+            if ($softwareCheckEnabled) { $logPlugins = @("SoftwareVersionCheck") + $logPlugins }
+            Write-Log ("Plugins: {0}" -f ($logPlugins -join ', '))
+            if ($softwareCheckEnabled -and $interactiveFlagRules.Count -gt 0) {
+                Write-Log "Flag rules ($($interactiveFlagRules.Count)):"
+                foreach ($rule in $interactiveFlagRules) {
+                    $labelStr = if ($rule.Label) { " [$($rule.Label)]" } else { "" }
+                    Write-Log "  $($rule.Pattern)  version: $($rule.VersionRule)$labelStr"
+                }
+            }
 
             switch ($selectedMode) {
                 "Scan" {
@@ -2961,7 +4086,11 @@ while ($step -ge 1 -and $step -le 6) {
                     Save-Config
                     Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
                                     -SelectedOutputs $selectedOutputs -Threads $threads `
-                                    -Timeout $timeout -PortList $portList -OutDir $outDir
+                                    -Timeout $timeout -PortList $portList -OutDir $outDir `
+                                    -SoftwareCheckEnabled:$softwareCheckEnabled `
+                                    -FlagRules $interactiveFlagRules `
+                                    -SoftwareFilters $interactiveSoftwareFilters `
+                                    -Credential $Credential
                 }
                 "List" {
                     $hostFilePath = $modeInputData.HostFile
@@ -2974,7 +4103,11 @@ while ($step -ge 1 -and $step -le 6) {
                     Save-Config
                     Invoke-ListMode -HostFilePath $hostFilePath -SelectedPlugins $selectedPlugins `
                                     -SelectedOutputs $selectedOutputs -Threads $threads `
-                                    -Timeout $timeout -PortList $portList -OutDir $outDir
+                                    -Timeout $timeout -PortList $portList -OutDir $outDir `
+                                    -SoftwareCheckEnabled:$softwareCheckEnabled `
+                                    -FlagRules $interactiveFlagRules `
+                                    -SoftwareFilters $interactiveSoftwareFilters `
+                                    -Credential $Credential
                 }
                 "Validate" {
                     $csvPath = $modeInputData.CSVPath
@@ -2992,7 +4125,7 @@ while ($step -ge 1 -and $step -le 6) {
             }
 
             # Done -- break out of the state machine
-            $step = 7
+            $step = 8
         }
     }
 }
