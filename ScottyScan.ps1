@@ -3843,25 +3843,26 @@ while ($step -ge 1 -and $step -le 8) {
             }
 
             # Interactive flag rules configuration
+            # Check for saved rules first to determine default selection
+            $savedRules = @()
+            $hasSaved = ($script:Config.PSObject.Properties.Name -contains 'SavedFlagRules' -and $script:Config.SavedFlagRules.Count -gt 0)
             $flagConfigItems = @(
                 @{ Name = "Load rules from file";  Value = "file";  Selected = $false; Description = "CSV with pattern,version_rule,label per line" }
                 @{ Name = "Enter rules manually";  Value = "manual"; Selected = $false; Description = "Type patterns and version thresholds" }
             )
 
-            # Check for saved rules
-            $savedRules = @()
-            if ($script:Config.PSObject.Properties.Name -contains 'SavedFlagRules' -and $script:Config.SavedFlagRules.Count -gt 0) {
+            if ($hasSaved) {
                 $savedRules = @($script:Config.SavedFlagRules)
                 $savedPreview = ($savedRules | Select-Object -First 2 | ForEach-Object { "$($_.Pattern) $($_.VersionRule)" }) -join '; '
                 if ($savedRules.Count -gt 2) { $savedPreview += " (+$($savedRules.Count - 2) more)" }
                 $flagConfigItems += @{
-                    Name = "Use saved rules ($($savedRules.Count))"; Value = "saved"; Selected = $false
+                    Name = "Use saved rules ($($savedRules.Count))"; Value = "saved"; Selected = $true
                     Description = $savedPreview
                 }
             }
 
             $flagConfigItems += @{
-                Name = "Skip (no flag rules)"; Value = "skip"; Selected = $true
+                Name = "Skip (no flag rules)"; Value = "skip"; Selected = (-not $hasSaved)
                 Description = "Run software inventory only, no version flagging"
             }
 
