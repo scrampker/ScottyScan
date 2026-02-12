@@ -462,15 +462,23 @@ function Show-InteractiveMenu {
     }
 
     # ---- Console TUI ----
-    $cursor = 0  # default: land on ALL button (index 0) for multi-select
+    $cursor = 0
     $itemCount = $selections.Count
     if ($itemCount -eq 0) { return @() }
 
-    if ($SingleSelect) {
-        # Find first selected item as starting cursor position
-        for ($i = 0; $i -lt $itemCount; $i++) {
-            if ($selections[$i].Selected) { $cursor = $i; break }
+    # Position cursor on the first pre-selected item so users can just hit
+    # Enter to keep previous selections. Falls back to first real item (after
+    # action buttons) when nothing is pre-selected, or index 0 as last resort.
+    $hasPreSelected = $false
+    for ($i = 0; $i -lt $itemCount; $i++) {
+        if ($selections[$i].Selected -and -not $selections[$i].IsAction) {
+            $cursor = $i
+            $hasPreSelected = $true
+            break
         }
+    }
+    if (-not $hasPreSelected -and $actionCount -gt 0) {
+        $cursor = $actionCount  # first real item, past ALL/NONE buttons
     }
 
     $scrollOffset = 0
