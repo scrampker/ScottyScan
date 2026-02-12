@@ -172,10 +172,17 @@ function Build-PortList {
     .SYNOPSIS
         Resolves a port string into an int[] port list, merged with plugin ScanPorts.
         "" or "all" = 1-65535. "top100" = TopPorts. Otherwise CSV of port numbers.
+        When SoftwareCheckOnly is set and no explicit port config was given, restricts
+        to management ports (135, 445, 5985, 5986) needed for Remote Registry,
+        PSRemoting, and WMI -- instead of scanning all 65535.
     #>
-    param([string]$PortString, [array]$SelectedPlugins)
+    param([string]$PortString, [array]$SelectedPlugins, [switch]$SoftwareCheckOnly)
     $portSet = @{}
-    if ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
+    if ($SoftwareCheckOnly -and ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all")) {
+        # Software-only scan: only need management ports for Remote Registry (445),
+        # PSRemoting/WinRM (5985, 5986), and WMI/DCOM (135)
+        foreach ($p in @(135, 445, 5985, 5986)) { $portSet[$p] = $true }
+    } elseif ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
         1..65535 | ForEach-Object { $portSet[$_] = $true }
     } elseif ($PortString -eq "top100") {
         foreach ($p in $script:TopPorts) { $portSet[$p] = $true }
@@ -209,8 +216,10 @@ function Build-PortList {
 }
 
 function Get-PortDisplayString {
-    param([string]$PortString)
-    if ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
+    param([string]$PortString, [switch]$SoftwareCheckOnly)
+    if ($SoftwareCheckOnly -and ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all")) {
+        return "Management ports only (135, 445, 5985, 5986)"
+    } elseif ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
         return "All ports (1-65535)"
     } elseif ($PortString -eq "top100") {
         return "Top 100 enterprise ports"
@@ -1175,10 +1184,12 @@ function Show-ConfirmationScreen {
         [int]$Timeout,
         [string]$Ports,
         [string]$InputDetail,
-        [string]$SoftwareCheckDetail
+        [string]$SoftwareCheckDetail,
+        [switch]$SoftwareCheckOnly,
+        [string]$CredentialDisplay
     )
 
-    $portsDisplay = Get-PortDisplayString $Ports
+    $portsDisplay = Get-PortDisplayString $Ports -SoftwareCheckOnly:$SoftwareCheckOnly
 
     if (-not (Test-IsConsoleHost)) {
         Write-Host ""
@@ -1190,6 +1201,9 @@ function Show-ConfirmationScreen {
         Write-Host "  Plugins:   $($PluginNames -join ', ')" -ForegroundColor White
         if ($SoftwareCheckDetail) {
             Write-Host "  SW Check:  $SoftwareCheckDetail" -ForegroundColor White
+        }
+        if ($CredentialDisplay) {
+            Write-Host "  Creds:     $CredentialDisplay" -ForegroundColor White
         }
         Write-Host "  Outputs:   $($OutputNames -join ', ')" -ForegroundColor White
         Write-Host "  Threads:   $Threads" -ForegroundColor White
@@ -1218,6 +1232,9 @@ function Show-ConfirmationScreen {
         script:Write-LineAt -Row $r -Text "  Plugins:   $($PluginNames -join ', ')" -Fg White; $r++
         if ($SoftwareCheckDetail) {
             script:Write-LineAt -Row $r -Text "  SW Check:  $SoftwareCheckDetail" -Fg White; $r++
+        }
+        if ($CredentialDisplay) {
+            script:Write-LineAt -Row $r -Text "  Creds:     $CredentialDisplay" -Fg White; $r++
         }
         script:Write-LineAt -Row $r -Text "  Outputs:   $($OutputNames -join ', ')" -Fg White; $r++
         script:Write-LineAt -Row $r -Text "  Threads:   $Threads" -Fg White; $r++
@@ -3624,7 +3641,8 @@ if ($mode -and $NoMenu) {
                 exit 1
             }
 
-            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+            $swOnly = ($softwareCheckEnabled -and $selectedPlugins.Count -eq 0)
+            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins -SoftwareCheckOnly:$swOnly
 
             Save-Config
             Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
@@ -3639,7 +3657,8 @@ if ($mode -and $NoMenu) {
                 Write-Log "No valid host file provided." "ERROR"
                 exit 1
             }
-            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+            $swOnly = ($softwareCheckEnabled -and $selectedPlugins.Count -eq 0)
+            $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins -SoftwareCheckOnly:$swOnly
 
             Save-Config
             Invoke-ListMode -HostFilePath $HostFile -SelectedPlugins $selectedPlugins `
@@ -3676,10 +3695,11 @@ if ($mode -and $NoMenu) {
 #  Step 1: Mode select               -> Esc = exit
 #  Step 2: Plugin select             -> Esc = back to 1
 #  Step 3: Flag rules config (cond.) -> Esc = back to 2
-#  Step 4: Output select             -> Esc = back to 3 (or 2)
-#  Step 5: Settings                  -> Esc = back to 4
-#  Step 6: Mode-specific input       -> Esc = back to 5
-#  Step 7: Confirmation screen       -> Esc = back to 6, Enter = execute
+#  Step 4: Credential prompt (cond.) -> Esc = back to 3 (or 2)
+#  Step 5: Output select             -> Esc = back to 4
+#  Step 6: Settings                  -> Esc = back to 5
+#  Step 7: Mode-specific input       -> Esc = back to 6
+#  Step 8: Confirmation screen       -> Esc = back to 7, Enter = execute
 # ============================================================
 
 $step = 1
@@ -3691,8 +3711,9 @@ $modeInputData        = $null
 $softwareCheckEnabled = $false
 $interactiveFlagRules = @()
 $interactiveSoftwareFilters = @()
+$interactiveCredential = $Credential  # may be pre-set from CLI -Credential param
 
-while ($step -ge 1 -and $step -le 7) {
+while ($step -ge 1 -and $step -le 8) {
 
     switch ($step) {
 
@@ -3902,11 +3923,61 @@ while ($step -ge 1 -and $step -le 7) {
             $step = 4
         }
 
-        # ---- STEP 4: Output Selection ----
+        # ---- STEP 4: Credential Prompt (conditional) ----
         4 {
+            # Only prompt if Software Version Check is selected AND mode is not Validate
+            # AND no credential was provided via CLI
+            if (-not $softwareCheckEnabled -or $selectedMode -eq "Validate") {
+                $step = 5
+                continue
+            }
+            if ($Credential) {
+                # CLI already provided credentials
+                $interactiveCredential = $Credential
+                $step = 5
+                continue
+            }
+
+            $credItems = @(
+                @{ Name = "Use current session (domain credentials)"; Value = "session"; Selected = $true;  Description = "Authenticate as $($env:USERDOMAIN)\$($env:USERNAME)" }
+                @{ Name = "Enter alternate credentials";              Value = "prompt";  Selected = $false; Description = "Provide username and password for remote access" }
+            )
+            $credChoice = Show-InteractiveMenu -Title "Credentials for remote software check:" `
+                                                -Items $credItems -SingleSelect
+            if ($null -eq $credChoice) {
+                # Back to step 3 if software check enabled, else step 2
+                $step = if ($softwareCheckEnabled -and $selectedMode -ne "Validate") { 3 } else { 2 }
+                continue
+            }
+
+            $credPicked = $credChoice | Select-Object -First 1
+            if ($credPicked -eq "prompt") {
+                try {
+                    if (Test-IsConsoleHost) {
+                        try { [Console]::CursorVisible = $true } catch {}
+                    }
+                    Write-Host ""
+                    Write-Host "  Enter credentials for remote access:" -ForegroundColor Yellow
+                    $interactiveCredential = Get-Credential -Message "ScottyScan - Remote Access Credentials"
+                    if (Test-IsConsoleHost) {
+                        try { [Console]::CursorVisible = $false } catch {}
+                    }
+                } catch {
+                    Write-Host "  Credential entry cancelled. Using current session." -ForegroundColor DarkYellow
+                    $interactiveCredential = $null
+                }
+            } else {
+                $interactiveCredential = $null
+            }
+
+            $step = 5
+        }
+
+        # ---- STEP 5: Output Selection ----
+        5 {
             if ($Outputs) {
                 $selectedOutputs = $Outputs -split ',' | ForEach-Object { $_.Trim() }
-                $step = 5
+                $step = 6
                 continue
             }
 
@@ -3918,21 +3989,21 @@ while ($step -ge 1 -and $step -le 7) {
             )
             $outputResult = Show-InteractiveMenu -Title "Output options:" -Items $outputItems -AllowSelectAll
             if ($null -eq $outputResult) {
-                # Back to step 3 if software check enabled, else step 2
-                $step = if ($softwareCheckEnabled -and $selectedMode -ne "Validate") { 3 } else { 2 }
+                # Back to credential step (4)
+                $step = 4
                 continue
             }
             $selectedOutputs = @($outputResult)
             Update-ConfigValue "DefaultOutputs" $selectedOutputs
             Update-ConfigValue "LastOutputDir" $outDir
-            $step = 5
+            $step = 6
         }
 
-        # ---- STEP 5: Settings (threads/timeout/ports) ----
-        5 {
+        # ---- STEP 6: Settings (threads/timeout/ports) ----
+        6 {
             $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr
             if ($null -eq $settingsResult) {
-                $step = 4
+                $step = 5
                 continue
             }
             $threads = $settingsResult.Threads
@@ -3941,11 +4012,11 @@ while ($step -ge 1 -and $step -le 7) {
             Update-ConfigValue "DefaultThreads" $threads
             Update-ConfigValue "DefaultTimeoutMs" $timeout
             Update-ConfigValue "DefaultPorts" $portStr
-            $step = 6
+            $step = 7
         }
 
-        # ---- STEP 6: Mode-Specific Input ----
-        6 {
+        # ---- STEP 7: Mode-Specific Input ----
+        7 {
             # Check if CLI already provided the needed input
             $cliInputProvided = $false
             switch ($selectedMode) {
@@ -3975,13 +4046,13 @@ while ($step -ge 1 -and $step -le 7) {
                     "List"     { $modeInputData = @{ HostFile = $HostFile } }
                     "Validate" { $modeInputData = @{ CSVPath = $InputCSV } }
                 }
-                $step = 7
+                $step = 8
                 continue
             }
 
             $modeInputData = Get-ModeInput -Mode $selectedMode -Config $script:Config
             if ($null -eq $modeInputData) {
-                $step = 5
+                $step = 6
                 continue
             }
 
@@ -4005,11 +4076,11 @@ while ($step -ge 1 -and $step -le 7) {
                     Update-ConfigValue "LastInputCSV" $modeInputData.CSVPath
                 }
             }
-            $step = 7
+            $step = 8
         }
 
-        # ---- STEP 7: Confirmation Screen ----
-        7 {
+        # ---- STEP 8: Confirmation Screen ----
+        8 {
             # Build input detail string for display
             $inputDetail = ""
             switch ($selectedMode) {
@@ -4041,6 +4112,15 @@ while ($step -ge 1 -and $step -le 7) {
                 $swCheckDetail = "Inventory only (no flag rules)"
             }
 
+            $swOnly = ($softwareCheckEnabled -and $selectedPlugins.Count -eq 0)
+            $credDisplay = ""
+            if ($softwareCheckEnabled) {
+                if ($interactiveCredential) {
+                    $credDisplay = $interactiveCredential.UserName
+                } else {
+                    $credDisplay = "Current session ($($env:USERDOMAIN)\$($env:USERNAME))"
+                }
+            }
             $confirmed = Show-ConfirmationScreen `
                 -Mode $selectedMode `
                 -PluginNames $confirmPluginNames `
@@ -4049,10 +4129,12 @@ while ($step -ge 1 -and $step -le 7) {
                 -Timeout $timeout `
                 -Ports $portStr `
                 -InputDetail $inputDetail `
-                -SoftwareCheckDetail $swCheckDetail
+                -SoftwareCheckDetail $swCheckDetail `
+                -SoftwareCheckOnly:$swOnly `
+                -CredentialDisplay $credDisplay
 
             if (-not $confirmed) {
-                $step = 6
+                $step = 7
                 continue
             }
 
@@ -4066,6 +4148,13 @@ while ($step -ge 1 -and $step -le 7) {
             $logPlugins = @($selectedPlugins | ForEach-Object { $_.Name })
             if ($softwareCheckEnabled) { $logPlugins = @("SoftwareVersionCheck") + $logPlugins }
             Write-Log ("Plugins: {0}" -f ($logPlugins -join ', '))
+            if ($softwareCheckEnabled) {
+                if ($interactiveCredential) {
+                    Write-Log "Credentials: $($interactiveCredential.UserName)"
+                } else {
+                    Write-Log "Credentials: Current session ($($env:USERDOMAIN)\$($env:USERNAME))"
+                }
+            }
             if ($softwareCheckEnabled -and $interactiveFlagRules.Count -gt 0) {
                 Write-Log "Flag rules ($($interactiveFlagRules.Count)):"
                 foreach ($rule in $interactiveFlagRules) {
@@ -4074,6 +4163,8 @@ while ($step -ge 1 -and $step -le 7) {
                 }
             }
 
+            $swOnly = ($softwareCheckEnabled -and $selectedPlugins.Count -eq 0)
+
             switch ($selectedMode) {
                 "Scan" {
                     $cidrList = $modeInputData.CIDRList
@@ -4081,7 +4172,7 @@ while ($step -ge 1 -and $step -le 7) {
                         Write-Log "No CIDRs provided." "ERROR"
                         exit 1
                     }
-                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins -SoftwareCheckOnly:$swOnly
 
                     Save-Config
                     Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
@@ -4090,7 +4181,7 @@ while ($step -ge 1 -and $step -le 7) {
                                     -SoftwareCheckEnabled:$softwareCheckEnabled `
                                     -FlagRules $interactiveFlagRules `
                                     -SoftwareFilters $interactiveSoftwareFilters `
-                                    -Credential $Credential
+                                    -Credential $interactiveCredential
                 }
                 "List" {
                     $hostFilePath = $modeInputData.HostFile
@@ -4098,7 +4189,7 @@ while ($step -ge 1 -and $step -le 7) {
                         Write-Log "No valid host file provided." "ERROR"
                         exit 1
                     }
-                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins
+                    $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins -SoftwareCheckOnly:$swOnly
 
                     Save-Config
                     Invoke-ListMode -HostFilePath $hostFilePath -SelectedPlugins $selectedPlugins `
@@ -4107,7 +4198,7 @@ while ($step -ge 1 -and $step -le 7) {
                                     -SoftwareCheckEnabled:$softwareCheckEnabled `
                                     -FlagRules $interactiveFlagRules `
                                     -SoftwareFilters $interactiveSoftwareFilters `
-                                    -Credential $Credential
+                                    -Credential $interactiveCredential
                 }
                 "Validate" {
                     $csvPath = $modeInputData.CSVPath
@@ -4125,7 +4216,7 @@ while ($step -ge 1 -and $step -le 7) {
             }
 
             # Done -- break out of the state machine
-            $step = 8
+            $step = 9
         }
     }
 }

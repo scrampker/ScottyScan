@@ -86,10 +86,11 @@ State machine flow with back-navigation:
 1. Mode select (Scan/List/Validate) -> Esc = exit
 2. Plugin select (multi-checkbox, includes "Software Version Check") -> Esc = back to 1
 3. Flag rules config (conditional -- only if Software Version Check selected) -> Esc = back to 2
-4. Output select (multi-checkbox) -> Esc = back to 3 or 2
-5. Settings (threads/timeout/ports) -> Esc = back to 4
-6. Mode-specific input (CIDRs/file/CSV) -> Esc = back to 5
-7. Confirmation screen -> Esc = back to 6, Enter = execute
+4. Credential prompt (conditional -- only if Software Version Check selected) -> Esc = back to 3 or 2
+5. Output select (multi-checkbox) -> Esc = back to 4
+6. Settings (threads/timeout/ports) -> Esc = back to 5
+7. Mode-specific input (CIDRs/file/CSV) -> Esc = back to 6
+8. Confirmation screen -> Esc = back to 7, Enter = execute
 
 File input prompts use a two-panel TUI: left panel shows last 5 history entries, right panel (Left arrow) has Browse/Type manually actions.
 
@@ -101,6 +102,7 @@ Default: all 65535 ports. Configurable via Settings menu:
 - **All ports (1-65535)**: Full TCP sweep with priority ordering (Top 100 + plugin ports first, then remainder)
 - **Top 100 enterprise ports**: Common services only
 - **Custom port list**: User-specified CSV
+- **Management ports only (135, 445, 5985, 5986)**: Automatic when only Software Version Check is selected (no vuln plugins). Covers Remote Registry (445), PSRemoting/WinRM (5985, 5986), and WMI/DCOM (135).
 
 Port scanning uses batched async TCP connections (2000 per batch, 500ms connect timeout) with progress reported via `[hashtable]::Synchronized()` back to the main thread.
 
