@@ -2322,6 +2322,16 @@ function Invoke-HostDiscovery {
                             $line = "  [{0}/{1}] [+] {2,-15} ALIVE  {3} open port(s)  {4}  {5}" -f `
                                 $completed, $total, $hostResult.IP, $portCount, $osStr, $hostStr
                             [void]$hostResultBuf.Add(@{ Text = $line; Color = [ConsoleColor]::Green })
+                            # Update port counter from final results (progress polling
+                            # may have missed them on fast scans with few ports)
+                            if (-not $displayedPorts.ContainsKey($hostResult.IP)) { $displayedPorts[$hostResult.IP] = @{} }
+                            foreach ($op in $hostResult.OpenPorts) {
+                                if (-not $displayedPorts[$hostResult.IP].ContainsKey($op)) {
+                                    $displayedPorts[$hostResult.IP][$op] = $true
+                                    $totalPortsFound++
+                                    [void]$portBuf.Add("  [*] $($hostResult.IP):${op}")
+                                }
+                            }
                             $portsJoined = ($hostResult.OpenPorts | Sort-Object) -join ','
                             Write-Log "ALIVE $($hostResult.IP) ($hostStr) -- OS=$osStr TTL=$($hostResult.TTL) Ports=[$portsJoined]" -Silent
                         } else {
