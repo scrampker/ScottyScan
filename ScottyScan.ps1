@@ -2201,10 +2201,11 @@ function Invoke-HostDiscovery {
                 OS        = ""
                 TTL       = 0
             }
-            # Ping
+            # Ping (500ms is plenty for LAN/WAN; $Timeout is for plugin tests)
+            $pingTimeout = 500
             try {
                 $ping = New-Object System.Net.NetworkInformation.Ping
-                $reply = $ping.Send($IP, $Timeout)
+                $reply = $ping.Send($IP, $pingTimeout)
                 if ($reply.Status -eq 'Success') {
                     $result.Alive = $true
                     $result.TTL = $reply.Options.Ttl
