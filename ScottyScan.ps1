@@ -2940,37 +2940,48 @@ function Export-SoftwareOutputs {
     $ts = $script:Timestamp
 
     # Full software inventory CSV
+    # Stamp each software entry with the parent inventory IP/Hostname since
+    # ComputerName can be lost during RunspacePool deserialization
     $allSoftware = [System.Collections.Generic.List[PSObject]]::new()
     foreach ($inv in $AllInventory) {
         if ($inv.Software) {
-            foreach ($sw in $inv.Software) { $allSoftware.Add($sw) }
+            foreach ($sw in $inv.Software) {
+                $sw | Add-Member -NotePropertyName ComputerName -NotePropertyValue $inv.IP -Force
+                $allSoftware.Add($sw)
+            }
         }
     }
 
-    if ($allSoftware.Count -gt 0) {
-        $invPath = Join-Path $OutDir "SoftwareInventory_ALL_$ts.csv"
-        $allSoftware | Sort-Object ComputerName, Name |
-            Select-Object ComputerName, Name, Version, Publisher, InstallDate, InstallPath, Architecture, Source |
-            Export-Csv -Path $invPath -NoTypeInformation -Encoding UTF8
-        Write-Log "Software inventory: $invPath ($($allSoftware.Count) entries)"
+    # Use flag rule patterns as implicit software filters when no explicit
+    # filters were provided, so the inventory CSVs only contain relevant entries
+    $effectiveFilters = $SoftwareFilters
+    if ((-not $effectiveFilters -or $effectiveFilters.Count -eq 0) -and $FlagRules -and $FlagRules.Count -gt 0) {
+        $effectiveFilters = @($FlagRules | ForEach-Object { $_.Pattern })
+    }
 
-        # Filtered inventory
-        if ($SoftwareFilters -and $SoftwareFilters.Count -gt 0) {
-            $filtered = $allSoftware | Where-Object {
+    if ($allSoftware.Count -gt 0) {
+        # Apply effective filters to the inventory if available
+        $exportSoftware = $allSoftware
+        if ($effectiveFilters -and $effectiveFilters.Count -gt 0) {
+            $exportSoftware = @($allSoftware | Where-Object {
                 $name = $_.Name
                 $matchesAny = $false
-                foreach ($f in $SoftwareFilters) {
+                foreach ($f in $effectiveFilters) {
                     if ($name -like $f) { $matchesAny = $true; break }
                 }
                 $matchesAny
-            }
-            if ($filtered) {
-                $filtPath = Join-Path $OutDir "SoftwareInventory_FILTERED_$ts.csv"
-                @($filtered) | Sort-Object ComputerName, Name, Version |
-                    Select-Object ComputerName, Name, Version, Publisher, InstallDate, InstallPath, Architecture, Source |
-                    Export-Csv -Path $filtPath -NoTypeInformation -Encoding UTF8
-                Write-Log "Filtered software inventory: $filtPath ($(@($filtered).Count) entries)"
-            }
+            })
+        }
+
+        if ($exportSoftware.Count -gt 0) {
+            $invPath = Join-Path $OutDir "SoftwareInventory_ALL_$ts.csv"
+            $exportSoftware | Sort-Object ComputerName, Name |
+                Select-Object ComputerName, Name, Version, Publisher, InstallDate, InstallPath, Architecture, Source |
+                Export-Csv -Path $invPath -NoTypeInformation -Encoding UTF8
+            $filterNote = if ($effectiveFilters -and $effectiveFilters.Count -gt 0) { " (filtered by $($effectiveFilters.Count) pattern(s))" } else { "" }
+            Write-Log "Software inventory: $invPath ($($exportSoftware.Count) entries)$filterNote"
+        } else {
+            Write-Log "Software inventory: no entries matched filters" "WARN"
         }
     }
 
