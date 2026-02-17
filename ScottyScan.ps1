@@ -1277,12 +1277,17 @@ function Get-ModeInput {
         [PSCustomObject]$Config
     )
 
+    # Resolve report directory to absolute path (relative paths break if CWD != script dir)
+    $reportDir = if ($Config.PSObject.Properties.Name -contains 'LastOutputDir' -and $Config.LastOutputDir) {
+        $Config.LastOutputDir
+    } else { ".\output_reports" }
+    if (-not [System.IO.Path]::IsPathRooted($reportDir)) {
+        $reportDir = Join-Path $PSScriptRoot $reportDir
+    }
+
     switch ($Mode) {
         "Scan" {
             # Check for existing Discovery CSVs to offer reuse
-            $reportDir = if ($Config.PSObject.Properties.Name -contains 'LastOutputDir' -and $Config.LastOutputDir) {
-                $Config.LastOutputDir
-            } else { ".\output_reports" }
             $discoveryCsvs = @()
             if (Test-Path $reportDir) {
                 $discoveryCsvs = @(Get-ChildItem -Path $reportDir -Filter "Discovery_*.csv" -File -ErrorAction SilentlyContinue |
@@ -1335,9 +1340,6 @@ function Get-ModeInput {
         }
         "List" {
             # Check for existing Discovery CSVs to offer reuse
-            $reportDir = if ($Config.PSObject.Properties.Name -contains 'LastOutputDir' -and $Config.LastOutputDir) {
-                $Config.LastOutputDir
-            } else { ".\output_reports" }
             $discoveryCsvs = @()
             if (Test-Path $reportDir) {
                 $discoveryCsvs = @(Get-ChildItem -Path $reportDir -Filter "Discovery_*.csv" -File -ErrorAction SilentlyContinue |
@@ -3698,6 +3700,10 @@ Load-Config
 
 $outDir = if ($OutputDir) { $OutputDir } else { $script:Config.LastOutputDir }
 if (-not $outDir) { $outDir = ".\output_reports" }
+# Resolve to absolute path so config lookups work regardless of CWD
+if (-not [System.IO.Path]::IsPathRooted($outDir)) {
+    $outDir = Join-Path $PSScriptRoot $outDir
+}
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
 $logDir = Join-Path $outDir "logs"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
