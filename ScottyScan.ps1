@@ -1780,6 +1780,27 @@ function Get-SSHKexAlgorithms {
         return @{ Banner = $banner; KexAlgorithms = ($kexList -split ',') }
     } catch { try { $client.Close() } catch {}; return $null }
 }
+
+function Get-OSFromBanner {
+    param([string]$Banner)
+    if (-not $Banner) { return '' }
+    if ($Banner -match 'Ubuntu') { return 'Ubuntu' }
+    if ($Banner -match 'Debian') { return 'Debian' }
+    if ($Banner -match 'Raspbian') { return 'Raspbian' }
+    if ($Banner -match 'NetBSD') { return 'NetBSD' }
+    if ($Banner -match 'FreeBSD') { return 'FreeBSD' }
+    if ($Banner -match 'OpenBSD') { return 'OpenBSD' }
+    if ($Banner -match 'Fedora') { return 'Fedora' }
+    if ($Banner -match 'CentOS') { return 'CentOS' }
+    if ($Banner -match 'AlmaLinux') { return 'AlmaLinux' }
+    if ($Banner -match 'Rocky') { return 'Rocky Linux' }
+    if ($Banner -match 'RHEL|Red.?Hat') { return 'RHEL' }
+    if ($Banner -match 'SUSE|SLE[SD]') { return 'SUSE' }
+    if ($Banner -match 'Arch') { return 'Arch Linux' }
+    if ($Banner -match 'ESXi|VMware') { return 'ESXi' }
+    if ($Banner -match 'Cisco') { return 'Cisco IOS' }
+    return ''
+}
 '@
 
 # ============================================================
@@ -2656,6 +2677,304 @@ function Invoke-HostDiscovery {
 }
 
 # ============================================================
+#  OS FINGERPRINTING (post-discovery enrichment)
+# ============================================================
+
+function Invoke-OSFingerprint {
+    <#
+    .SYNOPSIS
+        Enriches LiveHosts with detailed OS info via CIM/WMI, SSH banner, and port heuristics.
+        Modifies $LiveHosts in-place (updates .OS, adds .DetectMethod).
+    #>
+    param(
+        [System.Collections.ArrayList]$LiveHosts,
+        [int]$MaxThreads = 20,
+        [int]$TimeoutMs = 5000,
+        [PSCredential]$Credential
+    )
+
+    if ($LiveHosts.Count -eq 0) { return }
+
+    Write-Section "PHASE 1b: OS Fingerprinting"
+    Write-Log "OS Fingerprinting: $($LiveHosts.Count) hosts, timeout ${TimeoutMs}ms"
+
+    $threadCount = [Math]::Min($MaxThreads, 20)
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $threadCount)
+    $pool.Open()
+    $jobs = [System.Collections.ArrayList]::new()
+
+    foreach ($host_ in $LiveHosts) {
+        $ps = [PowerShell]::Create()
+        $ps.RunspacePool = $pool
+
+        [void]$ps.AddScript(@"
+param(`$Cred)
+
+`$ip       = '$($host_.IP)'
+`$ports    = @($( ($host_.OpenPorts | ForEach-Object { $_ }) -join ',' ))
+`$curOS    = '$($host_.OS -replace "'","''")'
+`$curHost  = '$($host_.Hostname -replace "'","''")'
+`$timeout  = $TimeoutMs
+
+`$newOS       = `$curOS
+`$newHostname = ''
+`$method      = 'TTL'
+`$domain      = ''
+
+# --- Quick-probe management ports (may not have been in discovery scan) ---
+`$mgmtPorts = @(135, 445, 5985)
+`$mgmtOpen = @{}
+foreach (`$mp in `$mgmtPorts) {
+    if (`$ports -contains `$mp) { `$mgmtOpen[`$mp] = `$true; continue }
+    try {
+        `$tc = New-Object System.Net.Sockets.TcpClient
+        `$ar = `$tc.BeginConnect(`$ip, `$mp, `$null, `$null)
+        if (`$ar.AsyncWaitHandle.WaitOne(500, `$false)) {
+            try { `$tc.EndConnect(`$ar) } catch {}
+            if (`$tc.Connected) { `$mgmtOpen[`$mp] = `$true }
+        }
+        `$tc.Close(); `$tc.Dispose()
+    } catch { try { `$tc.Close(); `$tc.Dispose() } catch {} }
+}
+
+# --- Technique 1: CIM/WMI (best for Windows) ---
+`$cimDone = `$false
+if (`$mgmtOpen.Count -gt 0) {
+    try {
+        `$cimParams = @{
+            ComputerName = `$ip
+            ClassName    = 'Win32_OperatingSystem'
+            ErrorAction  = 'Stop'
+            OperationTimeoutSec = [Math]::Max([int](`$timeout / 1000), 3)
+        }
+        if (`$Cred) { `$cimParams.Credential = `$Cred }
+        `$os = Get-CimInstance @cimParams
+        if (`$os) {
+            `$caption = `$os.Caption -replace '^Microsoft\s+',''
+            `$build   = `$os.BuildNumber
+            `$newOS   = "`$caption (Build `$build)"
+            `$method  = 'CIM/WMI'
+            `$cimDone = `$true
+
+            try {
+                `$csParams = @{
+                    ComputerName = `$ip
+                    ClassName    = 'Win32_ComputerSystem'
+                    ErrorAction  = 'Stop'
+                    OperationTimeoutSec = [Math]::Max([int](`$timeout / 1000), 3)
+                }
+                if (`$Cred) { `$csParams.Credential = `$Cred }
+                `$cs = Get-CimInstance @csParams
+                if (`$cs.Domain) { `$domain = `$cs.Domain }
+                if (`$cs.Name)   { `$newHostname = `$cs.Name }
+            }
+            catch { }
+        }
+    }
+    catch { }
+}
+
+# --- Technique 2: SSH Banner (Linux/ESXi) ---
+if (-not `$cimDone) {
+    `$sshPorts = @(22, 1022, 2222) | Where-Object { `$ports -contains `$_ }
+    foreach (`$sshPort in `$sshPorts) {
+        try {
+            `$tcp = New-Object System.Net.Sockets.TcpClient
+            `$task = `$tcp.ConnectAsync(`$ip, `$sshPort)
+            if (`$task.Wait([Math]::Min(`$timeout, 3000)) -and `$tcp.Connected) {
+                `$stream = `$tcp.GetStream()
+                `$stream.ReadTimeout = 3000
+                `$buffer = New-Object byte[] 1024
+                `$bytesRead = `$stream.Read(`$buffer, 0, `$buffer.Length)
+                `$banner = [System.Text.Encoding]::ASCII.GetString(`$buffer, 0, `$bytesRead).Trim()
+
+                `$method = 'SSH'
+
+                if (`$banner -match '(?<!\w)Ubuntu') {
+                    `$newOS = 'Ubuntu'
+                    # Map OpenSSH version to Ubuntu release (each Ubuntu ships a specific OpenSSH)
+                    if (`$banner -match 'OpenSSH_(\d+\.\d+)') {
+                        `$sshVer = `$Matches[1]
+                        `$ubuntuMap = @{
+                            '10.0'='25.10'; '9.9'='25.04'; '9.7'='24.10'; '9.6'='24.04'
+                            '9.3'='23.10'; '9.0'='23.04'; '8.9'='22.04'; '8.4'='21.10'
+                            '8.3'='21.04'; '8.2'='20.04'; '7.6'='18.04'; '7.2'='16.04'
+                            '6.6'='14.04'; '5.9'='12.04'
+                        }
+                        if (`$ubuntuMap.ContainsKey(`$sshVer)) {
+                            `$newOS = "Ubuntu `$(`$ubuntuMap[`$sshVer])"
+                        }
+                    }
+                }
+                elseif (`$banner -match 'Debian') {
+                    `$newOS = 'Debian'
+                }
+                elseif (`$banner -match 'Raspbian') {
+                    `$newOS = 'Raspbian'
+                }
+                elseif (`$banner -match 'FreeBSD') {
+                    `$newOS = 'FreeBSD'
+                }
+                elseif (`$banner -match 'NetBSD') {
+                    `$newOS = 'NetBSD'
+                }
+                elseif (`$banner -match 'OpenBSD') {
+                    `$newOS = 'OpenBSD'
+                }
+                elseif (`$banner -match 'Fedora') {
+                    `$newOS = 'Fedora'
+                }
+                elseif (`$banner -match 'CentOS') {
+                    `$newOS = 'CentOS'
+                }
+                elseif (`$banner -match 'AlmaLinux') {
+                    `$newOS = 'AlmaLinux'
+                }
+                elseif (`$banner -match 'Rocky') {
+                    `$newOS = 'Rocky Linux'
+                }
+                elseif (`$banner -match 'Red Hat|RHEL') {
+                    `$newOS = 'RHEL'
+                }
+                elseif (`$banner -match 'SUSE') {
+                    `$newOS = 'SUSE'
+                }
+                elseif (`$banner -match 'VMware|ESXi') {
+                    `$newOS = 'ESXi'
+                }
+                elseif (`$banner -match 'Cisco') {
+                    `$newOS = 'Cisco'
+                }
+                elseif (`$banner -match 'OpenSSH') {
+                    if (`$ports -contains 3389 -or `$ports -contains 636 -or `$mgmtOpen.ContainsKey(135) -or `$mgmtOpen.ContainsKey(5985)) {
+                        `$newOS = 'Windows (SSH)'
+                    }
+                    else {
+                        `$newOS = 'Linux/Unix'
+                    }
+                }
+                else {
+                    `$newOS = 'Linux/Unix'
+                }
+            }
+            `$tcp.Close()
+            `$tcp.Dispose()
+            if (`$method -eq 'SSH') { break }
+        }
+        catch {
+            try { `$tcp.Close(); `$tcp.Dispose() } catch {}
+        }
+    }
+}
+
+# --- Technique 3: Port heuristic ---
+if (`$method -eq 'TTL' -and (`$ports -contains 3389 -or `$ports -contains 636 -or `$mgmtOpen.ContainsKey(135) -or `$mgmtOpen.ContainsKey(5985) -or (`$ports -contains 445 -and -not (`$ports -contains 22)))) {
+    `$newOS  = 'Windows (probable)'
+    `$method = 'Port-Heuristic'
+}
+
+return @{
+    IP           = `$ip
+    OS           = `$newOS
+    Hostname     = `$newHostname
+    DetectMethod = `$method
+    Domain       = `$domain
+}
+"@)
+        [void]$ps.AddArgument($Credential)
+        $handle = $ps.BeginInvoke()
+        [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle; IP = $host_.IP })
+    }
+
+    # Collect results with scrolling output
+    $completed = 0
+    $total = $jobs.Count
+    $pending = [System.Collections.ArrayList]::new($jobs)
+    $spinChars = @('|', '/', '-', '\')
+    $spinIdx = 0
+    $startTime = [DateTime]::Now
+    $osCounts = @{ Windows = 0; Linux = 0; ESXi = 0; Other = 0 }
+
+    # Build lookup for in-place updates
+    $hostIndex = @{}
+    for ($idx = 0; $idx -lt $LiveHosts.Count; $idx++) {
+        $hostIndex[$LiveHosts[$idx].IP] = $idx
+    }
+
+    while ($pending.Count -gt 0) {
+        for ($i = $pending.Count - 1; $i -ge 0; $i--) {
+            $job = $pending[$i]
+            if ($job.Handle.IsCompleted) {
+                Write-Host "`r                                                                                    `r" -NoNewline
+                try {
+                    $output = $job.PowerShell.EndInvoke($job.Handle)
+                    if ($output -and $output.Count -gt 0) {
+                        $r = $output[0]
+                        $completed++
+
+                        # Update host in-place
+                        if ($hostIndex.ContainsKey($r.IP)) {
+                            $h = $LiveHosts[$hostIndex[$r.IP]]
+                            $h.OS = $r.OS
+                            $h.DetectMethod = $r.DetectMethod
+                            # Hostname: CIM result wins, else keep DNS result with "DNS:" prefix
+                            if ($r.Hostname) {
+                                $h.Hostname = $r.Hostname
+                            } elseif ($h.Hostname -and $h.Hostname -notmatch '^DNS:') {
+                                $h.Hostname = "DNS:" + $h.Hostname
+                            }
+                        }
+
+                        # Count
+                        if ($r.OS -like "*Windows*") { $osCounts.Windows++ }
+                        elseif ($r.OS -match 'ESXi|VMware') { $osCounts.ESXi++ }
+                        elseif ($r.OS -match 'Linux|Ubuntu|Debian|Fedora|CentOS|Alma|Rocky|RHEL|SUSE|BSD|Raspbian') { $osCounts.Linux++ }
+                        else { $osCounts.Other++ }
+
+                        # Color by method
+                        $methodColor = switch ($r.DetectMethod) {
+                            'CIM/WMI'       { [ConsoleColor]::Cyan }
+                            'SSH'           { [ConsoleColor]::Green }
+                            'Port-Heuristic' { [ConsoleColor]::DarkYellow }
+                            default         { [ConsoleColor]::Gray }
+                        }
+                        $tag = "[$($r.DetectMethod)]".PadRight(16)
+                        $domainStr = if ($r.Domain) { " [$($r.Domain)]" } else { "" }
+                        $hostStr = if ($r.Hostname) { " ($($r.Hostname))" } else { "" }
+                        Write-Host ("  {0} {1,-15} -> {2}{3}{4}" -f $tag, $r.IP, $r.OS, $domainStr, $hostStr) -ForegroundColor $methodColor
+                        Write-Log "OS-FP $($r.IP) -> $($r.OS) via $($r.DetectMethod)$domainStr$hostStr" "INFO"
+                    } else {
+                        $completed++
+                    }
+                } catch {
+                    $completed++
+                }
+                $job.PowerShell.Dispose()
+                $pending.RemoveAt($i)
+            }
+        }
+
+        if ($pending.Count -gt 0) {
+            $elapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+            $spin = $spinChars[$spinIdx % $spinChars.Count]
+            $spinIdx++
+            Write-Host ("`r  $spin  Fingerprinting... $completed/$total complete  [$elapsed]") -NoNewline
+            Start-Sleep -Milliseconds 250
+        }
+    }
+
+    Write-Host "`r                                                                                    `r" -NoNewline
+    $totalElapsed = ([DateTime]::Now - $startTime).ToString("mm\:ss")
+    Write-Host ""
+    Write-Host ("  {0} hosts fingerprinted: {1} Windows, {2} Linux, {3} ESXi, {4} Other  [{5}]" -f `
+        $total, $osCounts.Windows, $osCounts.Linux, $osCounts.ESXi, $osCounts.Other, $totalElapsed) -ForegroundColor Green
+    Write-Log ("OS Fingerprint complete: $total hosts -- Windows=$($osCounts.Windows) Linux=$($osCounts.Linux) ESXi=$($osCounts.ESXi) Other=$($osCounts.Other) in $totalElapsed")
+
+    $pool.Close()
+    $pool.Dispose()
+}
+
+# ============================================================
 #  SCAN EXECUTION ENGINE (shared across all modes)
 # ============================================================
 
@@ -2743,11 +3062,15 @@ $($script:HelperFunctionsString)
 }
 try {
     `$r = & `$testBlock `$context
+    `$targetOS = '$($test.OS -replace "'","''")'
+    `$pluginOS = `$r.OS
+    # Prefer target OS from fingerprinting; fall back to plugin OS if target is empty or generic
+    `$osValue = if (`$targetOS -and `$targetOS -ne 'Linux/Unix' -and `$targetOS -ne 'Windows') { `$targetOS } elseif (`$pluginOS) { `$pluginOS } elseif (`$targetOS) { `$targetOS } else { '' }
     return @{
         IP         = '$($test.IP)'
         Port       = '$($test.Port)'
         Hostname   = '$($test.Hostname)'
-        OS         = '$($test.OS -replace "'","''")'
+        OS         = `$osValue
         PluginName = '$($test.PluginName)'
         Result     = `$r.Result
         Detail     = `$r.Detail
@@ -3460,10 +3783,6 @@ function Invoke-ScanMode {
         Write-Section "PHASE 1: Loading Previous Discovery Results"
         $liveHosts = Import-DiscoveryCSV -Path $DiscoveryCSVPath
         Write-Log "$($liveHosts.Count) hosts loaded from Discovery CSV (skipping discovery)" "OK"
-
-        # Still export a new Discovery CSV for consistency
-        $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
-        Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
     } else {
         Write-Section "PHASE 1: Host Discovery"
 
@@ -3479,11 +3798,14 @@ function Invoke-ScanMode {
 
         $liveHosts = Invoke-HostDiscovery -IPList $uniqueIPs -MaxThreads $Threads -TimeoutMs $Timeout -PortList $PortList
         Write-Log "$($liveHosts.Count) live hosts discovered" "OK"
-
-        # Always export Discovery CSV so results can be reused
-        $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
-        Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
     }
+
+    # OS fingerprinting (enriches .OS in-place; runs on both fresh discovery and CSV loads)
+    Invoke-OSFingerprint -LiveHosts $liveHosts -MaxThreads $Threads -TimeoutMs $Timeout -Credential $Credential
+
+    # Export Discovery CSV with enriched OS
+    $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
+    Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
 
     if ($liveHosts.Count -eq 0) {
         Write-Log "No live hosts found. Nothing to scan." "WARN"
@@ -3566,8 +3888,13 @@ function Invoke-ListMode {
         $liveHosts = Invoke-HostDiscovery -IPList $lines -MaxThreads $Threads `
                                           -TimeoutMs $Timeout -PortList $PortList
         Write-Log "$($liveHosts.Count) hosts alive of $($lines.Count)" "OK"
+    }
 
-        # Always export Discovery CSV so results can be reused
+    # OS fingerprinting (enriches .OS in-place; runs on both fresh discovery and CSV loads)
+    Invoke-OSFingerprint -LiveHosts $liveHosts -MaxThreads $Threads -TimeoutMs $Timeout -Credential $Credential
+
+    if (-not $isDiscoveryCSV) {
+        # Export Discovery CSV with enriched OS so results can be reused
         $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
         Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
     }
@@ -3627,7 +3954,8 @@ function Invoke-ValidateMode {
         [int]$Threads,
         [int]$Timeout,
         [int[]]$PortList,
-        [string]$OutDir
+        [string]$OutDir,
+        [PSCredential]$Credential
     )
 
     Write-Section "PHASE 1: Loading OpenVAS CSV"
@@ -3643,6 +3971,10 @@ function Invoke-ValidateMode {
 
     $liveHosts = Invoke-HostDiscovery -IPList $uniqueIPs -MaxThreads $Threads `
                                       -TimeoutMs $Timeout -PortList $PortList
+
+    # OS fingerprinting
+    Invoke-OSFingerprint -LiveHosts $liveHosts -MaxThreads $Threads -TimeoutMs $Timeout -Credential $Credential
+
     Write-Log "$($liveHosts.Count) hosts alive of $($uniqueIPs.Count)" "OK"
 
     # Export discovery CSV if requested
@@ -3650,6 +3982,10 @@ function Invoke-ValidateMode {
         $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
         Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
     }
+
+    # Build host lookup for OS enrichment on targets
+    $hostLookup = @{}
+    foreach ($h in $liveHosts) { $hostLookup[$h.IP] = $h }
 
     # Match each row to a validator
     $matchable = [System.Collections.ArrayList]::new()
@@ -3671,10 +4007,12 @@ function Invoke-ValidateMode {
     # Build targets from matched findings
     $targets = $matchable | ForEach-Object {
         $normIP = (($_.Row.ip.Trim() -split '\.') | ForEach-Object { [int]$_ }) -join '.'
+        $hostInfo = $hostLookup[$normIP]
         @{
             IP       = $normIP
             Port     = $_.Row.port
             Hostname = $_.Row.hostname
+            OS       = if ($hostInfo) { $hostInfo.OS } else { '' }
         }
     }
 
@@ -3912,7 +4250,8 @@ if ($mode -and $NoMenu) {
             Save-Config
             Invoke-ValidateMode -CSVPath $InputCSV -SelectedPlugins $selectedPlugins `
                                 -SelectedOutputs $selectedOutputs -Threads $threads `
-                                -Timeout $timeout -PortList $portList -OutDir $outDir
+                                -Timeout $timeout -PortList $portList -OutDir $outDir `
+                                -Credential $Credential
         }
     }
 
@@ -4465,7 +4804,8 @@ while ($step -ge 1 -and $step -le 8) {
                     Save-Config
                     Invoke-ValidateMode -CSVPath $csvPath -SelectedPlugins $selectedPlugins `
                                         -SelectedOutputs $selectedOutputs -Threads $threads `
-                                        -Timeout $timeout -PortList $portList -OutDir $outDir
+                                        -Timeout $timeout -PortList $portList -OutDir $outDir `
+                                        -Credential $interactiveCredential
                 }
             }
 

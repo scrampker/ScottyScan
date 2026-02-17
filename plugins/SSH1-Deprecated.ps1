@@ -40,20 +40,25 @@ Register-Validator @{
             return @{ Result = "Error"; Detail = "Failed to read SSH banner: $msg" }
         }
 
+        $bannerOS = Get-OSFromBanner $banner
+
         if ($banner -match '^SSH-1\.(5|99)') {
             return @{
                 Result = "Vulnerable"
                 Detail = "SSH-1 protocol detected. Banner: $banner"
+                OS     = $bannerOS
             }
         } elseif ($banner -match '^SSH-2\.0') {
             return @{
                 Result = "Remediated"
                 Detail = "SSH-2 only. Banner: $banner"
+                OS     = $bannerOS
             }
         } else {
             return @{
                 Result = "Inconclusive"
                 Detail = "Unexpected banner: $banner"
+                OS     = $bannerOS
             }
         }
     }

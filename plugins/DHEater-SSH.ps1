@@ -20,11 +20,14 @@ Register-Validator @{
             return @{ Result = "Unreachable"; Detail = "Port $port not responding or SSH handshake failed" }
         }
 
+        $bannerOS = Get-OSFromBanner $kexInfo.Banner
+
         $dheAlgs = $kexInfo.KexAlgorithms | Where-Object { $_ -match '^diffie-hellman-' }
         if ($dheAlgs.Count -gt 0) {
             return @{
                 Result = "Vulnerable"
                 Detail = "$($dheAlgs.Count) DHE kex: $($dheAlgs -join '; ')"
+                OS     = $bannerOS
             }
         }
 
@@ -32,6 +35,7 @@ Register-Validator @{
         return @{
             Result = "Remediated"
             Detail = "0 DHE kex. $($safeAlgs.Count) safe ECDH/hybrid algorithms. Banner: $($kexInfo.Banner)"
+            OS     = $bannerOS
         }
     }
 }
