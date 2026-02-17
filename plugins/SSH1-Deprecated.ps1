@@ -14,22 +14,14 @@ Register-Validator @{
         $port = [int]$Context.Port
         $tout = $Context.TimeoutMs
 
-        $tcpResult = Test-TCPConnect -IP $ip -Port $port -TimeoutMs $tout
-        if (-not $tcpResult) {
-            $reason = if ($null -eq $tcpResult) { "timed out after ${tout}ms" } else { "connection refused" }
-            return @{
-                Result = "Unreachable"
-                Detail = "Port $port $reason"
-            }
-        }
-
+        # Single connection: connect, read banner, evaluate
         try {
             $client = New-Object System.Net.Sockets.TcpClient
             $ar = $client.BeginConnect($ip, $port, $null, $null)
             $waited = $ar.AsyncWaitHandle.WaitOne($tout, $false)
             if (-not $waited) {
                 $client.Close()
-                return @{ Result = "Unreachable"; Detail = "Connection timed out" }
+                return @{ Result = "Unreachable"; Detail = "Port $port timed out after ${tout}ms" }
             }
             $client.EndConnect($ar)
             $stream = $client.GetStream()
@@ -40,7 +32,12 @@ Register-Validator @{
             $banner = [System.Text.Encoding]::ASCII.GetString($buf, 0, $n).Trim()
         } catch {
             try { $client.Close() } catch {}
-            return @{ Result = "Error"; Detail = "Failed to read SSH banner: $_" }
+            $msg = "$($_.Exception.InnerException.Message)"
+            if (-not $msg) { $msg = "$($_.Exception.Message)" }
+            if ($msg -match 'actively refused') {
+                return @{ Result = "Unreachable"; Detail = "Port $port connection refused" }
+            }
+            return @{ Result = "Error"; Detail = "Failed to read SSH banner: $msg" }
         }
 
         if ($banner -match '^SSH-1\.(5|99)') {

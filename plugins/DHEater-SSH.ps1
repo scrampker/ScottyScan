@@ -14,15 +14,10 @@ Register-Validator @{
         $port = [int]$Context.Port
         $tout = $Context.TimeoutMs
 
-        $tcpResult = Test-TCPConnect -IP $ip -Port $port -TimeoutMs $tout
-        if (-not $tcpResult) {
-            $reason = if ($null -eq $tcpResult) { "timed out after ${tout}ms" } else { "connection refused" }
-            return @{ Result = "Unreachable"; Detail = "Port $port $reason" }
-        }
-
+        # Single connection via Get-SSHKexAlgorithms (no separate Test-TCPConnect)
         $kexInfo = Get-SSHKexAlgorithms -IP $ip -Port $port -TimeoutMs $tout
         if ($null -eq $kexInfo) {
-            return @{ Result = "Error"; Detail = "Failed to parse SSH KEX_INIT on port $port" }
+            return @{ Result = "Unreachable"; Detail = "Port $port not responding or SSH handshake failed" }
         }
 
         $dheAlgs = $kexInfo.KexAlgorithms | Where-Object { $_ -match '^diffie-hellman-' }

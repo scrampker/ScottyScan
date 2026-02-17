@@ -182,6 +182,18 @@ function Build-PortList {
         # Software-only scan: only need management ports for Remote Registry (445),
         # PSRemoting/WinRM (5985, 5986), and WMI/DCOM (135)
         foreach ($p in @(135, 445, 5985, 5986)) { $portSet[$p] = $true }
+    } elseif ($PortString -eq "plugin") {
+        # Plugin recommended: only scan ports the selected plugins need
+        foreach ($plugin in $SelectedPlugins) {
+            if ($plugin.ScanPorts -and $plugin.ScanPorts.Count -gt 0) {
+                foreach ($p in $plugin.ScanPorts) { $portSet[[int]$p] = $true }
+            }
+        }
+        if ($portSet.Count -eq 0) {
+            # No plugin ports declared -- fall back to all ports
+            1..65535 | ForEach-Object { $portSet[$_] = $true }
+        }
+        return @($portSet.Keys | Sort-Object)
     } elseif ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
         1..65535 | ForEach-Object { $portSet[$_] = $true }
     } elseif ($PortString -eq "top100") {
@@ -216,9 +228,20 @@ function Build-PortList {
 }
 
 function Get-PortDisplayString {
-    param([string]$PortString, [switch]$SoftwareCheckOnly)
+    param([string]$PortString, [switch]$SoftwareCheckOnly, [array]$SelectedPlugins)
     if ($SoftwareCheckOnly -and ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all")) {
         return "Management ports only (135, 445, 5985, 5986)"
+    } elseif ($PortString -eq "plugin") {
+        $pluginPortSet = @{}
+        if ($SelectedPlugins) {
+            foreach ($pl in $SelectedPlugins) {
+                if ($pl.ScanPorts -and $pl.ScanPorts.Count -gt 0) {
+                    foreach ($p in $pl.ScanPorts) { $pluginPortSet[[int]$p] = $true }
+                }
+            }
+        }
+        $unionPorts = @($pluginPortSet.Keys | Sort-Object)
+        return "Plugin recommended ($($unionPorts.Count) ports)"
     } elseif ([string]::IsNullOrWhiteSpace($PortString) -or $PortString -eq "all") {
         return "All ports (1-65535)"
     } elseif ($PortString -eq "top100") {
@@ -479,6 +502,10 @@ function Show-InteractiveMenu {
     }
     if (-not $hasPreSelected -and $actionCount -gt 0) {
         $cursor = $actionCount  # first real item, past ALL/NONE buttons
+    }
+    # SingleSelect: auto-select the cursor item so the (*) indicator is visible
+    if ($SingleSelect -and -not $hasPreSelected) {
+        $selections[$cursor].Selected = $true
     }
 
     $scrollOffset = 0
@@ -1115,10 +1142,11 @@ function Show-SettingsMenu {
         [int]$CurrentThreads,
         [int]$CurrentTimeout,
         [string]$CurrentPorts,
-        [switch]$SoftwareCheckOnly
+        [switch]$SoftwareCheckOnly,
+        [array]$SelectedPlugins
     )
 
-    $portsDisplay = Get-PortDisplayString $CurrentPorts -SoftwareCheckOnly:$SoftwareCheckOnly
+    $portsDisplay = Get-PortDisplayString $CurrentPorts -SoftwareCheckOnly:$SoftwareCheckOnly -SelectedPlugins $SelectedPlugins
 
     $settingsItems = @(
         @{ Name = "Max threads: $CurrentThreads";    Value = "Threads"; Selected = $false; Description = "Parallel scan threads" }
@@ -1128,7 +1156,7 @@ function Show-SettingsMenu {
     )
 
     while ($true) {
-        $portsDisplay = Get-PortDisplayString $CurrentPorts -SoftwareCheckOnly:$SoftwareCheckOnly
+        $portsDisplay = Get-PortDisplayString $CurrentPorts -SoftwareCheckOnly:$SoftwareCheckOnly -SelectedPlugins $SelectedPlugins
         $settingsItems[0].Name = "Max threads: $CurrentThreads"
         $settingsItems[1].Name = "Timeout (ms): $CurrentTimeout"
         $settingsItems[2].Name = "Discovery ports: $portsDisplay"
@@ -1150,19 +1178,47 @@ function Show-SettingsMenu {
                 if ($val -match '^\d+$' -and [int]$val -gt 0) { $CurrentTimeout = [int]$val }
             }
             "Ports" {
+                # Build plugin-recommended description showing per-plugin breakdown
+                $pluginPortDesc = ""
+                if ($SelectedPlugins -and $SelectedPlugins.Count -gt 0) {
+                    $pluginPortSet = @{}
+                    foreach ($pl in $SelectedPlugins) {
+                        if ($pl.ScanPorts -and $pl.ScanPorts.Count -gt 0) {
+                            foreach ($p in $pl.ScanPorts) { $pluginPortSet[[int]$p] = $true }
+                        }
+                    }
+                    $unionPorts = @($pluginPortSet.Keys | Sort-Object)
+                    $pluginPortDesc = "$($unionPorts.Count) ports: $($unionPorts -join ', ')"
+                }
+
                 $portOptions = @(
                     @{ Name = "All ports (1-65535)";      Value = "all";    Selected = ([string]::IsNullOrWhiteSpace($CurrentPorts) -or $CurrentPorts -eq "all"); Description = "Full TCP port scan" }
                     @{ Name = "Top 100 enterprise ports"; Value = "top100"; Selected = ($CurrentPorts -eq "top100"); Description = "Common enterprise services" }
-                    @{ Name = "Custom port list";         Value = "custom"; Selected = ($CurrentPorts -ne "" -and $CurrentPorts -ne "all" -and $CurrentPorts -ne "top100"); Description = "Specify individual ports" }
                 )
+                if ($pluginPortDesc) {
+                    $portOptions += @{
+                        Name = "Plugin recommended ports"
+                        Value = "plugin"
+                        Selected = ($CurrentPorts -eq "plugin")
+                        Description = $pluginPortDesc
+                    }
+                }
+                $portOptions += @{
+                    Name = "Custom port list"
+                    Value = "custom"
+                    Selected = ($CurrentPorts -ne "" -and $CurrentPorts -ne "all" -and $CurrentPorts -ne "top100" -and $CurrentPorts -ne "plugin")
+                    Description = "Specify individual ports"
+                }
+
                 $portChoice = Show-InteractiveMenu -Title "Discovery port range:" -Items $portOptions -SingleSelect
                 if ($null -ne $portChoice) {
                     $portPicked = $portChoice | Select-Object -First 1
                     switch ($portPicked) {
                         "all"    { $CurrentPorts = "" }
                         "top100" { $CurrentPorts = "top100" }
+                        "plugin" { $CurrentPorts = "plugin" }
                         "custom" {
-                            $existing = if ($CurrentPorts -and $CurrentPorts -ne "all" -and $CurrentPorts -ne "top100") { $CurrentPorts } else { "22,80,443,3389" }
+                            $existing = if ($CurrentPorts -and $CurrentPorts -ne "all" -and $CurrentPorts -ne "top100" -and $CurrentPorts -ne "plugin") { $CurrentPorts } else { "22,80,443,3389" }
                             $val = Show-TextPrompt -Prompt "TCP ports (comma-separated):" -Default $existing
                             if ($val) { $CurrentPorts = $val }
                         }
@@ -1195,10 +1251,11 @@ function Show-ConfirmationScreen {
         [string]$InputDetail,
         [string]$SoftwareCheckDetail,
         [switch]$SoftwareCheckOnly,
-        [string]$CredentialDisplay
+        [string]$CredentialDisplay,
+        [array]$SelectedPlugins
     )
 
-    $portsDisplay = Get-PortDisplayString $Ports -SoftwareCheckOnly:$SoftwareCheckOnly
+    $portsDisplay = Get-PortDisplayString $Ports -SoftwareCheckOnly:$SoftwareCheckOnly -SelectedPlugins $SelectedPlugins
 
     if (-not (Test-IsConsoleHost)) {
         Write-Host ""
@@ -1282,7 +1339,7 @@ function Get-ModeInput {
         $Config.LastOutputDir
     } else { ".\output_reports" }
     if (-not [System.IO.Path]::IsPathRooted($reportDir)) {
-        $reportDir = Join-Path $PSScriptRoot $reportDir
+        $reportDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot $reportDir))
     }
 
     switch ($Mode) {
@@ -1423,7 +1480,7 @@ function Load-Config {
         DefaultTimeoutMs = 5000
         DefaultPlugins   = @()
         DefaultOutputs   = @("MasterCSV", "SummaryReport", "PerPluginCSV", "DiscoveryCSV")
-        DefaultPorts     = ""
+        DefaultPorts     = "plugin"
         LastOutputDir    = ".\output_reports"
         SavedFlagRules   = @()
         LastSoftwareFilter = ""
@@ -2650,6 +2707,7 @@ function Invoke-PluginScan {
                     IP         = $target.IP
                     Port       = $port
                     Hostname   = $target.Hostname
+                    OS         = $target.OS
                     Plugin     = $plugin
                     PluginName = $plugin.Name
                 })
@@ -2689,6 +2747,7 @@ try {
         IP         = '$($test.IP)'
         Port       = '$($test.Port)'
         Hostname   = '$($test.Hostname)'
+        OS         = '$($test.OS -replace "'","''")'
         PluginName = '$($test.PluginName)'
         Result     = `$r.Result
         Detail     = `$r.Detail
@@ -2698,6 +2757,7 @@ try {
         IP         = '$($test.IP)'
         Port       = '$($test.Port)'
         Hostname   = '$($test.Hostname)'
+        OS         = '$($test.OS -replace "'","''")'
         PluginName = '$($test.PluginName)'
         Result     = 'Error'
         Detail     = "Exception: [`$(`$_.Exception.GetType().Name)] `$(`$_.Exception.Message)"
@@ -2910,7 +2970,7 @@ return `$results
         [void]$ps.AddArgument($Credential)
 
         $handle = $ps.BeginInvoke()
-        [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle; IP = $target.IP; Hostname = $target.Hostname })
+        [void]$jobs.Add(@{ PowerShell = $ps; Handle = $handle; IP = $target.IP; Hostname = $target.Hostname; OS = $target.OS })
     }
 
     # Collect results with real-time output
@@ -2955,6 +3015,7 @@ return `$results
                                         IP         = $item.IP
                                         Port       = '0'
                                         Hostname   = $item.Hostname
+                                        OS         = $job.OS
                                         PluginName = 'SoftwareVersionCheck'
                                         Result     = 'Vulnerable'
                                         Detail     = "$($item.SoftwareName) v$($item.Version) -- $($item.StatusMsg)$labelStr"
@@ -3127,7 +3188,7 @@ function Export-SoftwareOutputs {
 
 function Export-MasterCSV {
     param([array]$Findings, [string]$Path)
-    $header = "IP,Hostname,Port,Plugin,Result,Detail,Timestamp"
+    $header = "IP,Hostname,OS,Port,Plugin,Result,Detail,Timestamp"
     $lines = [System.Collections.ArrayList]::new()
     [void]$lines.Add($header)
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -3135,7 +3196,8 @@ function Export-MasterCSV {
         $detail = ($f.Detail -replace '"', '""')
         if ($detail -match '[,"\n]') { $detail = "`"$detail`"" }
         $hostname = if ($f.Hostname) { $f.Hostname } else { "" }
-        [void]$lines.Add("$($f.IP),$hostname,$($f.Port),$($f.PluginName),$($f.Result),$detail,$ts")
+        $os = if ($f.OS) { $f.OS } else { "" }
+        [void]$lines.Add("$($f.IP),$hostname,$os,$($f.Port),$($f.PluginName),$($f.Result),$detail,$ts")
     }
     $lines -join "`n" | Out-File -FilePath $Path -Encoding UTF8
     Write-Log "Master CSV: $Path ($($Findings.Count) findings)"
@@ -3191,7 +3253,9 @@ function Export-SummaryReport {
         [void]$sb.AppendLine("  VULNERABLE (action required)")
         [void]$sb.AppendLine("================================================================")
         foreach ($f in ($vulnFindings | Sort-Object { $_.IP })) {
-            [void]$sb.AppendLine(("  {0,-18} {1,-35} port {2,-6} [{3}]" -f $f.IP, $f.Hostname, $f.Port, $f.PluginName))
+            $osStr = if ($f.OS) { " ($($f.OS))" } else { "" }
+            [void]$sb.AppendLine(("  {0,-18} {1}{2}" -f $f.IP, $f.Hostname, $osStr))
+            [void]$sb.AppendLine(("    port {0,-6} [{1}]" -f $f.Port, $f.PluginName))
             [void]$sb.AppendLine(("    {0}" -f $f.Detail))
         }
         [void]$sb.AppendLine("")
@@ -3702,7 +3766,7 @@ $outDir = if ($OutputDir) { $OutputDir } else { $script:Config.LastOutputDir }
 if (-not $outDir) { $outDir = ".\output_reports" }
 # Resolve to absolute path so config lookups work regardless of CWD
 if (-not [System.IO.Path]::IsPathRooted($outDir)) {
-    $outDir = Join-Path $PSScriptRoot $outDir
+    $outDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot $outDir))
 }
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
 $logDir = Join-Path $outDir "logs"
@@ -3723,7 +3787,7 @@ if ($script:Validators.Count -eq 0) {
 # --- Resolve threads/timeout defaults ---
 $threads = if ($MaxThreads -gt 0) { $MaxThreads } elseif ($script:Config.DefaultThreads) { $script:Config.DefaultThreads } else { 20 }
 $timeout = if ($TimeoutMs -gt 0) { $TimeoutMs } elseif ($script:Config.DefaultTimeoutMs) { $script:Config.DefaultTimeoutMs } else { 5000 }
-$portStr = if ($Ports) { $Ports } elseif ($script:Config.DefaultPorts) { $script:Config.DefaultPorts } else { "" }
+$portStr = if ($Ports) { $Ports } elseif ($script:Config.DefaultPorts) { $script:Config.DefaultPorts } else { "plugin" }
 
 # --- Determine mode from CLI flags ---
 $mode = ""
@@ -4173,7 +4237,7 @@ while ($step -ge 1 -and $step -le 8) {
         # ---- STEP 6: Settings (threads/timeout/ports) ----
         6 {
             $swOnlySettings = ($softwareCheckEnabled -and $selectedPlugins.Count -eq 0)
-            $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr -SoftwareCheckOnly:$swOnlySettings
+            $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr -SoftwareCheckOnly:$swOnlySettings -SelectedPlugins $selectedPlugins
             if ($null -eq $settingsResult) {
                 $step = 5
                 continue
@@ -4309,7 +4373,8 @@ while ($step -ge 1 -and $step -le 8) {
                 -InputDetail $inputDetail `
                 -SoftwareCheckDetail $swCheckDetail `
                 -SoftwareCheckOnly:$swOnly `
-                -CredentialDisplay $credDisplay
+                -CredentialDisplay $credDisplay `
+                -SelectedPlugins $selectedPlugins
 
             if (-not $confirmed) {
                 $step = 7

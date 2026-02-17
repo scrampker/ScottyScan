@@ -14,12 +14,7 @@ Register-Validator @{
         $port = [int]$Context.Port
         $tout = $Context.TimeoutMs
 
-        $tcpResult = Test-TCPConnect -IP $ip -Port $port -TimeoutMs $tout
-        if (-not $tcpResult) {
-            $reason = if ($null -eq $tcpResult) { "timed out after ${tout}ms" } else { "connection refused" }
-            return @{ Result = "Unreachable"; Detail = "Port $port $reason" }
-        }
-
+        # No separate Test-TCPConnect -- first Send-TLSClientHello handles reachability
         $dheCiphers = @(
             @{ Name = "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384"; Code = [byte[]](0x00, 0x9F) }
             @{ Name = "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256"; Code = [byte[]](0x00, 0x9E) }
@@ -30,8 +25,18 @@ Register-Validator @{
         )
 
         $accepted = @()
+        $reachable = $false
         foreach ($cs in $dheCiphers) {
             $result = Send-TLSClientHello -IP $ip -Port $port -CipherCode $cs.Code -TimeoutMs $tout
+            if ($null -eq $result) {
+                # Connection failed -- if first attempt, port is unreachable; skip rest
+                if (-not $reachable) {
+                    return @{ Result = "Unreachable"; Detail = "Port $port not responding or TLS handshake failed" }
+                }
+                # Already got at least one response, this is a transient error -- skip cipher
+                continue
+            }
+            $reachable = $true
             if ($result -eq $true) { $accepted += $cs.Name }
         }
 
