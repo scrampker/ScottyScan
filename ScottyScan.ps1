@@ -1546,7 +1546,7 @@ function Test-TCPConnect {
         $client = New-Object System.Net.Sockets.TcpClient
         $ar = $client.BeginConnect($IP, $Port, $null, $null)
         $waited = $ar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
-        if (-not $waited) { $client.Close(); return $false }
+        if (-not $waited) { $client.Close(); return $null }
         $client.EndConnect($ar)
         $client.Close()
         return $true
@@ -1638,7 +1638,7 @@ function Test-TCPConnect {
         $client = New-Object System.Net.Sockets.TcpClient
         $ar = $client.BeginConnect($IP, $Port, $null, $null)
         $waited = $ar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
-        if (-not $waited) { $client.Close(); return $false }
+        if (-not $waited) { $client.Close(); return $null }
         $client.EndConnect($ar)
         $client.Close()
         return $true
@@ -2622,16 +2622,21 @@ function Invoke-PluginScan {
                 # Specific port provided (Validate mode -- exact IP:port combo)
                 $ports = @($target.Port)
             } elseif ($plugin.ScanPorts -and $plugin.ScanPorts.Count -gt 0) {
-                # Plugin declares specific ports it cares about.
-                # Test plugin's ScanPorts + any discovered open ports that overlap.
-                $pluginPortSet = @{}
-                foreach ($p in $plugin.ScanPorts) { $pluginPortSet[[int]$p] = $true }
-                # Also include discovered open ports that the plugin wants to check
-                # (the plugin's ScanPorts are always tested, discovered or not)
-                $ports = @($pluginPortSet.Keys | Sort-Object)
-                # Additionally, add any discovered open ports that the plugin is
-                # relevant for. For now, just test the plugin's declared ports.
-                # The plugin's TestBlock handles unreachable ports gracefully.
+                # Plugin declares specific ports -- intersect with discovered open ports
+                if ($target.OpenPorts -and $target.OpenPorts.Count -gt 0) {
+                    $openSet = @{}
+                    foreach ($op in $target.OpenPorts) { $openSet[[int]$op] = $true }
+                    $ports = @($plugin.ScanPorts | Where-Object { $openSet.ContainsKey([int]$_) })
+                    if ($ports.Count -eq 0) {
+                        Write-Log "[DEBUG] $($target.IP): skipping $($plugin.Name) -- none of its ScanPorts ($($plugin.ScanPorts -join ',')) are open (open: $($target.OpenPorts -join ','))" -Silent
+                        continue
+                    }
+                    Write-Log "[DEBUG] $($target.IP): $($plugin.Name) testing ports $($ports -join ',') (intersected from $($plugin.ScanPorts -join ','))" -Silent
+                } else {
+                    # No discovery data -- fall back to all plugin ScanPorts
+                    $ports = @($plugin.ScanPorts)
+                    Write-Log "[DEBUG] $($target.IP): $($plugin.Name) no OpenPorts data, testing all ScanPorts $($ports -join ',')" -Silent
+                }
             } else {
                 # Software-class plugin (ScanPorts is empty).
                 # Run once per host with port 0 as a sentinel.
@@ -2655,7 +2660,7 @@ function Invoke-PluginScan {
         return @()
     }
 
-    Write-Log ("Running {0} tests ({1} targets x plugins) with {2} threads" -f $testQueue.Count, $Targets.Count, $MaxThreads)
+    Write-Log ("Running {0} tests ({1} targets x plugins) with {2} threads, {3}ms timeout" -f $testQueue.Count, $Targets.Count, $MaxThreads, $TimeoutMs)
 
     $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $MaxThreads)
     $pool.Open()
@@ -2693,7 +2698,7 @@ try {
         Hostname   = '$($test.Hostname)'
         PluginName = '$($test.PluginName)'
         Result     = 'Error'
-        Detail     = "Exception: `$(`$_.Exception.Message)"
+        Detail     = "Exception: [`$(`$_.Exception.GetType().Name)] `$(`$_.Exception.Message)"
     }
 }
 "@)

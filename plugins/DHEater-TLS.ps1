@@ -14,8 +14,10 @@ Register-Validator @{
         $port = [int]$Context.Port
         $tout = $Context.TimeoutMs
 
-        if (-not (Test-TCPConnect -IP $ip -Port $port -TimeoutMs $tout)) {
-            return @{ Result = "Unreachable"; Detail = "Port $port not responding" }
+        $tcpResult = Test-TCPConnect -IP $ip -Port $port -TimeoutMs $tout
+        if (-not $tcpResult) {
+            $reason = if ($null -eq $tcpResult) { "timed out after ${tout}ms" } else { "connection refused" }
+            return @{ Result = "Unreachable"; Detail = "Port $port $reason" }
         }
 
         $dheCiphers = @(
