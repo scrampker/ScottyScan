@@ -244,7 +244,7 @@ function Write-Banner {
     $banner = @"
 
   ============================================
-   ___          _   _         ___
+   ___          _   _        ___
   / __| __ ___ | |_| |_ _  _/ __| __ __ _ _ _
   \__ \/ _/ _ \|  _|  _| || \__ \/ _/ _' | ' \
   |___/\__\___/\__|\__|\_, /|___/\__\__,_|_||_|
@@ -1114,10 +1114,11 @@ function Show-SettingsMenu {
     param(
         [int]$CurrentThreads,
         [int]$CurrentTimeout,
-        [string]$CurrentPorts
+        [string]$CurrentPorts,
+        [switch]$SoftwareCheckOnly
     )
 
-    $portsDisplay = Get-PortDisplayString $CurrentPorts
+    $portsDisplay = Get-PortDisplayString $CurrentPorts -SoftwareCheckOnly:$SoftwareCheckOnly
 
     $settingsItems = @(
         @{ Name = "Max threads: $CurrentThreads";    Value = "Threads"; Selected = $false; Description = "Parallel scan threads" }
@@ -1127,7 +1128,7 @@ function Show-SettingsMenu {
     )
 
     while ($true) {
-        $portsDisplay = Get-PortDisplayString $CurrentPorts
+        $portsDisplay = Get-PortDisplayString $CurrentPorts -SoftwareCheckOnly:$SoftwareCheckOnly
         $settingsItems[0].Name = "Max threads: $CurrentThreads"
         $settingsItems[1].Name = "Timeout (ms): $CurrentTimeout"
         $settingsItems[2].Name = "Discovery ports: $portsDisplay"
@@ -1278,6 +1279,40 @@ function Get-ModeInput {
 
     switch ($Mode) {
         "Scan" {
+            # Check for existing Discovery CSVs to offer reuse
+            $reportDir = if ($Config.PSObject.Properties.Name -contains 'LastOutputDir' -and $Config.LastOutputDir) {
+                $Config.LastOutputDir
+            } else { ".\output_reports" }
+            $discoveryCsvs = @()
+            if (Test-Path $reportDir) {
+                $discoveryCsvs = @(Get-ChildItem -Path $reportDir -Filter "Discovery_*.csv" -File -ErrorAction SilentlyContinue |
+                                   Sort-Object LastWriteTime -Descending |
+                                   Select-Object -First 10)
+            }
+
+            if ($discoveryCsvs.Count -gt 0) {
+                # Offer choice between reusing discovery results and entering new CIDRs
+                $sourceChoice = Show-InteractiveMenu -Title "Scan Mode -- Select host source:" `
+                    -Items @(
+                        @{ Name = "Scan previously-discovered systems"; Value = "DiscoveryCSV"; Selected = $true; Description = "Reuse a Discovery CSV from a prior scan (skip host discovery)" },
+                        @{ Name = "Enter new CIDRs to scan"; Value = "NewCIDRs"; Selected = $false; Description = "Specify CIDR ranges for fresh host discovery" }
+                    ) -SingleSelect
+                if ($null -eq $sourceChoice) { return $null }
+
+                if ($sourceChoice -contains "DiscoveryCSV") {
+                    # Show discovery CSVs as selectable history
+                    $discHistory = @($discoveryCsvs | ForEach-Object { $_.FullName })
+                    $csvPath = Show-FilePrompt -Title "Select a Discovery CSV to reuse:" `
+                                                -History $discHistory `
+                                                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" `
+                                                -TypePrompt "Type the full CSV file path:" `
+                                                -MustExist
+                    if (-not $csvPath) { return $null }
+                    return @{ DiscoveryCSV = $csvPath }
+                }
+            }
+
+            # Standard CIDR entry flow (no Discovery CSVs or user chose NewCIDRs)
             $history = Get-InputHistory -HistoryKey "CIDRInputHistory" -LegacyKey "LastCIDRs"
             # Also check LastCIDRFile as legacy fallback
             if ($history.Count -eq 0 -and $Config.PSObject.Properties.Name -contains 'LastCIDRFile' -and $Config.LastCIDRFile) {
@@ -1299,6 +1334,41 @@ function Get-ModeInput {
             }
         }
         "List" {
+            # Check for existing Discovery CSVs to offer reuse
+            $reportDir = if ($Config.PSObject.Properties.Name -contains 'LastOutputDir' -and $Config.LastOutputDir) {
+                $Config.LastOutputDir
+            } else { ".\output_reports" }
+            $discoveryCsvs = @()
+            if (Test-Path $reportDir) {
+                $discoveryCsvs = @(Get-ChildItem -Path $reportDir -Filter "Discovery_*.csv" -File -ErrorAction SilentlyContinue |
+                                   Sort-Object LastWriteTime -Descending |
+                                   Select-Object -First 10)
+            }
+
+            $hostFile = $null
+            if ($discoveryCsvs.Count -gt 0) {
+                # Offer choice between host list file and previous discovery results
+                $sourceChoice = Show-InteractiveMenu -Title "List Mode -- Select host source:" `
+                    -Items @(
+                        @{ Name = "Select a host list file"; Value = "HostList"; Selected = $false; Description = "Browse or type a file with one IP/hostname per line" },
+                        @{ Name = "Use previous discovery results"; Value = "DiscoveryCSV"; Selected = $false; Description = "Skip discovery by reusing a Discovery CSV from a prior run" }
+                    ) -SingleSelect
+                if ($null -eq $sourceChoice) { return $null }
+
+                if ($sourceChoice -contains "DiscoveryCSV") {
+                    # Show discovery CSVs as selectable history
+                    $discHistory = @($discoveryCsvs | ForEach-Object { $_.FullName })
+                    $hostFile = Show-FilePrompt -Title "Select a Discovery CSV to reuse:" `
+                                                -History $discHistory `
+                                                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" `
+                                                -TypePrompt "Type the full CSV file path:" `
+                                                -MustExist
+                    if (-not $hostFile) { return $null }
+                    return @{ HostFile = $hostFile }
+                }
+            }
+
+            # Standard host list file flow
             $history = Get-InputHistory -HistoryKey "HostFileHistory" -LegacyKey "LastHostFile"
             $hostFile = Show-FilePrompt -Title "Host list file (one IP/hostname per line):" `
                                         -History $history `
@@ -2751,10 +2821,10 @@ function Invoke-SoftwareCheck {
         $ps.RunspacePool = $pool
 
         [void]$ps.AddScript(@"
+param(`$IP, `$Hostname, `$FlagRulesJson, `$SoftwareFiltersJson, `$Cred)
+
 $($script:SoftwareHelperString)
 $($script:VersionHelperString)
-
-param(`$IP, `$Hostname, `$FlagRulesJson, `$SoftwareFiltersJson, `$Cred)
 
 `$flagRules = @()
 if (`$FlagRulesJson) {
@@ -3154,6 +3224,49 @@ function Export-SummaryReport {
     Write-Log "Summary report: $Path"
 }
 
+function Import-DiscoveryCSV {
+    <#
+    .SYNOPSIS
+        Reads a Discovery CSV and returns an ArrayList of host hashtables
+        in the same format as Invoke-HostDiscovery output.
+    #>
+    param([string]$Path)
+
+    $lines = Get-Content -Path $Path | Where-Object { $_ -match '\S' }
+    if ($lines.Count -lt 2) {
+        Write-Log "Discovery CSV has no data rows: $Path" "WARN"
+        return [System.Collections.ArrayList]::new()
+    }
+
+    $hosts = [System.Collections.ArrayList]::new()
+    # Skip header (first line)
+    for ($i = 1; $i -lt $lines.Count; $i++) {
+        $parts = $lines[$i] -split ',', 5
+        if ($parts.Count -lt 5) { continue }
+        $ip       = $parts[0].Trim()
+        $hostname = $parts[1].Trim()
+        $os       = $parts[2].Trim()
+        $ttl      = 0
+        [int]::TryParse($parts[3].Trim(), [ref]$ttl) | Out-Null
+        $portStr  = $parts[4].Trim()
+        $openPorts = @()
+        if ($portStr -and $portStr -ne '') {
+            $openPorts = @($portStr -split ';' | ForEach-Object {
+                $p = 0; if ([int]::TryParse($_.Trim(), [ref]$p)) { $p }
+            } | Where-Object { $_ -gt 0 })
+        }
+        [void]$hosts.Add(@{
+            IP        = $ip
+            Alive     = $true
+            Hostname  = $hostname
+            OS        = $os
+            TTL       = $ttl
+            OpenPorts = [int[]]$openPorts
+        })
+    }
+    return $hosts
+}
+
 function Export-DiscoveryCSV {
     param([array]$Hosts, [string]$Path)
     $header = "IP,Hostname,OS,TTL,OpenPorts"
@@ -3268,26 +3381,35 @@ function Invoke-ScanMode {
         [switch]$SoftwareCheckEnabled,
         [array]$FlagRules,
         [string[]]$SoftwareFilters,
-        [PSCredential]$Credential
+        [PSCredential]$Credential,
+        [string]$DiscoveryCSVPath
     )
 
-    Write-Section "PHASE 1: Host Discovery"
+    if ($DiscoveryCSVPath) {
+        Write-Section "PHASE 1: Loading Previous Discovery Results"
+        $liveHosts = Import-DiscoveryCSV -Path $DiscoveryCSVPath
+        Write-Log "$($liveHosts.Count) hosts loaded from Discovery CSV (skipping discovery)" "OK"
 
-    # Expand CIDRs
-    $allIPs = [System.Collections.ArrayList]::new()
-    foreach ($cidr in $CIDRList) {
-        $ips = Expand-CIDR $cidr
-        Write-Log "CIDR $cidr -> $($ips.Count) IPs"
-        foreach ($ip in $ips) { [void]$allIPs.Add($ip) }
-    }
-    $uniqueIPs = $allIPs | Sort-Object -Unique
-    Write-Log "Total unique IPs: $($uniqueIPs.Count)"
+        # Still export a new Discovery CSV for consistency
+        $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
+        Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
+    } else {
+        Write-Section "PHASE 1: Host Discovery"
 
-    $liveHosts = Invoke-HostDiscovery -IPList $uniqueIPs -MaxThreads $Threads -TimeoutMs $Timeout -PortList $PortList
-    Write-Log "$($liveHosts.Count) live hosts discovered" "OK"
+        # Expand CIDRs
+        $allIPs = [System.Collections.ArrayList]::new()
+        foreach ($cidr in $CIDRList) {
+            $ips = Expand-CIDR $cidr
+            Write-Log "CIDR $cidr -> $($ips.Count) IPs"
+            foreach ($ip in $ips) { [void]$allIPs.Add($ip) }
+        }
+        $uniqueIPs = $allIPs | Sort-Object -Unique
+        Write-Log "Total unique IPs: $($uniqueIPs.Count)"
 
-    # Export discovery CSV if requested
-    if ($SelectedOutputs -contains "DiscoveryCSV") {
+        $liveHosts = Invoke-HostDiscovery -IPList $uniqueIPs -MaxThreads $Threads -TimeoutMs $Timeout -PortList $PortList
+        Write-Log "$($liveHosts.Count) live hosts discovered" "OK"
+
+        # Always export Discovery CSV so results can be reused
         $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
         Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
     }
@@ -3355,19 +3477,26 @@ function Invoke-ListMode {
         [PSCredential]$Credential
     )
 
-    Write-Section "PHASE 1: Loading Host List + Port Discovery"
+    # Check if the input file is a Discovery CSV (auto-detect by header)
+    $firstLine = (Get-Content -Path $HostFilePath -TotalCount 1).Trim()
+    $isDiscoveryCSV = ($firstLine -eq "IP,Hostname,OS,TTL,OpenPorts")
 
-    $lines = Get-Content -Path $HostFilePath | Where-Object { $_ -match '\S' } |
-             ForEach-Object { $_.Trim() } | Sort-Object -Unique
-    Write-Log "$($lines.Count) unique hosts loaded from $HostFilePath"
+    if ($isDiscoveryCSV) {
+        Write-Section "PHASE 1: Loading Previous Discovery Results"
+        $liveHosts = Import-DiscoveryCSV -Path $HostFilePath
+        Write-Log "$($liveHosts.Count) hosts loaded from Discovery CSV (skipping discovery)" "OK"
+    } else {
+        Write-Section "PHASE 1: Loading Host List + Port Discovery"
+        $lines = Get-Content -Path $HostFilePath | Where-Object { $_ -match '\S' } |
+                 ForEach-Object { $_.Trim() } | Sort-Object -Unique
+        Write-Log "$($lines.Count) unique hosts loaded from $HostFilePath"
 
-    # Run discovery to find open ports, resolve hostnames, guess OS
-    $liveHosts = Invoke-HostDiscovery -IPList $lines -MaxThreads $Threads `
-                                      -TimeoutMs $Timeout -PortList $PortList
-    Write-Log "$($liveHosts.Count) hosts alive of $($lines.Count)" "OK"
+        # Run discovery to find open ports, resolve hostnames, guess OS
+        $liveHosts = Invoke-HostDiscovery -IPList $lines -MaxThreads $Threads `
+                                          -TimeoutMs $Timeout -PortList $PortList
+        Write-Log "$($liveHosts.Count) hosts alive of $($lines.Count)" "OK"
 
-    # Export discovery CSV if requested
-    if ($SelectedOutputs -contains "DiscoveryCSV") {
+        # Always export Discovery CSV so results can be reused
         $discPath = Join-Path $OutDir "Discovery_$($script:Timestamp).csv"
         Export-DiscoveryCSV -Hosts $liveHosts -Path $discPath
     }
@@ -4032,7 +4161,8 @@ while ($step -ge 1 -and $step -le 8) {
 
         # ---- STEP 6: Settings (threads/timeout/ports) ----
         6 {
-            $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr
+            $swOnlySettings = ($softwareCheckEnabled -and $selectedPlugins.Count -eq 0)
+            $settingsResult = Show-SettingsMenu -CurrentThreads $threads -CurrentTimeout $timeout -CurrentPorts $portStr -SoftwareCheckOnly:$swOnlySettings
             if ($null -eq $settingsResult) {
                 $step = 5
                 continue
@@ -4090,13 +4220,15 @@ while ($step -ge 1 -and $step -le 8) {
             # Persist to history
             switch ($selectedMode) {
                 "Scan" {
-                    $histVal = if ($modeInputData.RawInput) { $modeInputData.RawInput }
-                               elseif ($modeInputData.CIDRFile) { $modeInputData.CIDRFile }
-                               elseif ($modeInputData.CIDRs) { $modeInputData.CIDRs }
-                               else { $null }
-                    if ($histVal) { Push-InputHistory "CIDRInputHistory" $histVal }
-                    if ($modeInputData.CIDRFile) { Update-ConfigValue "LastCIDRFile" $modeInputData.CIDRFile }
-                    if ($modeInputData.CIDRs) { Update-ConfigValue "LastCIDRs" $modeInputData.CIDRs }
+                    if (-not $modeInputData.DiscoveryCSV) {
+                        $histVal = if ($modeInputData.RawInput) { $modeInputData.RawInput }
+                                   elseif ($modeInputData.CIDRFile) { $modeInputData.CIDRFile }
+                                   elseif ($modeInputData.CIDRs) { $modeInputData.CIDRs }
+                                   else { $null }
+                        if ($histVal) { Push-InputHistory "CIDRInputHistory" $histVal }
+                        if ($modeInputData.CIDRFile) { Update-ConfigValue "LastCIDRFile" $modeInputData.CIDRFile }
+                        if ($modeInputData.CIDRs) { Update-ConfigValue "LastCIDRs" $modeInputData.CIDRs }
+                    }
                 }
                 "List" {
                     Push-InputHistory "HostFileHistory" $modeInputData.HostFile
@@ -4116,9 +4248,13 @@ while ($step -ge 1 -and $step -le 8) {
             $inputDetail = ""
             switch ($selectedMode) {
                 "Scan" {
-                    $cidrDisplay = ($modeInputData.CIDRList | Select-Object -First 3) -join ', '
-                    if ($modeInputData.CIDRList.Count -gt 3) { $cidrDisplay += " (+$($modeInputData.CIDRList.Count - 3) more)" }
-                    $inputDetail = $cidrDisplay
+                    if ($modeInputData.DiscoveryCSV) {
+                        $inputDetail = "Discovery CSV: $($modeInputData.DiscoveryCSV)"
+                    } else {
+                        $cidrDisplay = ($modeInputData.CIDRList | Select-Object -First 3) -join ', '
+                        if ($modeInputData.CIDRList.Count -gt 3) { $cidrDisplay += " (+$($modeInputData.CIDRList.Count - 3) more)" }
+                        $inputDetail = $cidrDisplay
+                    }
                 }
                 "List"     { $inputDetail = $modeInputData.HostFile }
                 "Validate" { $inputDetail = $modeInputData.CSVPath }
@@ -4198,21 +4334,32 @@ while ($step -ge 1 -and $step -le 8) {
 
             switch ($selectedMode) {
                 "Scan" {
-                    $cidrList = $modeInputData.CIDRList
-                    if ($cidrList.Count -eq 0) {
-                        Write-Log "No CIDRs provided." "ERROR"
-                        exit 1
-                    }
                     $portList = Build-PortList -PortString $portStr -SelectedPlugins $selectedPlugins -SoftwareCheckOnly:$swOnly
-
                     Save-Config
-                    Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
-                                    -SelectedOutputs $selectedOutputs -Threads $threads `
-                                    -Timeout $timeout -PortList $portList -OutDir $outDir `
-                                    -SoftwareCheckEnabled:$softwareCheckEnabled `
-                                    -FlagRules $interactiveFlagRules `
-                                    -SoftwareFilters $interactiveSoftwareFilters `
-                                    -Credential $interactiveCredential
+
+                    if ($modeInputData.DiscoveryCSV) {
+                        Invoke-ScanMode -DiscoveryCSVPath $modeInputData.DiscoveryCSV `
+                                        -SelectedPlugins $selectedPlugins `
+                                        -SelectedOutputs $selectedOutputs -Threads $threads `
+                                        -Timeout $timeout -PortList $portList -OutDir $outDir `
+                                        -SoftwareCheckEnabled:$softwareCheckEnabled `
+                                        -FlagRules $interactiveFlagRules `
+                                        -SoftwareFilters $interactiveSoftwareFilters `
+                                        -Credential $interactiveCredential
+                    } else {
+                        $cidrList = $modeInputData.CIDRList
+                        if ($cidrList.Count -eq 0) {
+                            Write-Log "No CIDRs provided." "ERROR"
+                            exit 1
+                        }
+                        Invoke-ScanMode -CIDRList $cidrList -SelectedPlugins $selectedPlugins `
+                                        -SelectedOutputs $selectedOutputs -Threads $threads `
+                                        -Timeout $timeout -PortList $portList -OutDir $outDir `
+                                        -SoftwareCheckEnabled:$softwareCheckEnabled `
+                                        -FlagRules $interactiveFlagRules `
+                                        -SoftwareFilters $interactiveSoftwareFilters `
+                                        -Credential $interactiveCredential
+                    }
                 }
                 "List" {
                     $hostFilePath = $modeInputData.HostFile
