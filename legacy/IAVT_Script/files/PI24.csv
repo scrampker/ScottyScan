@@ -1,0 +1,46 @@
+﻿Device - Model,Type,Location,SVC Tag,IP Address,IP Address,Function,Classification
+Dell S3124,Switch,Rack 1-Carson,,,,iSCSI,Customer Confidential External
+Dell S2134,Switch,Rack 1-Carson,,,,iSCSI,Customer Confidential External
+Dell SCV320 ,Storage-Shelf,Rack 1-Carson,,,,,Customer Confidential External
+Dell SCV3020,Storage-Controller,Rack 1-Carson,,,,,Customer Confidential External
+Dell R530,Server,Rack 1-Carson,8M05JL2,,,Standalone,Customer Confidential Internal
+Dell PV MD3820i,Storage,Rack 1-Carson,9Q07JL2,,,Corp,Customer Confidential Internal
+DELL R430,Server,Rack 1-Carson,BPHRD42,,,Standalone,Customer Confidential Internal
+Dell R540,Server,Rack 1-Carson,BFY3DP2,199.6,192.168.199.6,Host-Walgreens,Customer Confidential External
+Dell R540,Server,Rack 1-Carson,2KKZ0Q2,101.6,192.168.101.6,Host - Carson,Customer Confidential External
+Dell R540,Server,Rack 1-Carson,2KKY0Q2,101.4,192.168.101.4,Host-Carson,Customer Confidential External
+Dell PV MD3820i,Storage,Rack 1-Carson,5C1VTQ2,,,Walgreens,Customer Confidential External
+Dell R540,Server,Rack 1-Carson,6Y081S2,101.17,192.168.101.17,Host-Carson,Customer Confidential External
+Dell R540,Server,Rack 1-Carson,6Y071S2,101.26,192.168.101.26,Host-Carson,Customer Confidential Internal
+Dell 5548 ,Switch,Rack1-Carson,,,,Core,
+Dell S3148,Switch,Rack2 - Carson,,,,,
+Dell R530,Server,Rack2 - Carson,HY12V2,,,Host-Walgreens,Customer Confidential External
+Dell 5524,Switch,Rack2 - Carson,,,,,
+Dell 2816,Switch,Rack2 - Carson,,,,vmotion,
+Dell R210,Server,Rack2 - Carson,BL94MS1,101.221,192.168.101.221,vSphere,Customer Confidential Internal
+Dell R610,Server,Rack2 - Carson,FW4S482,101.225,192.168.101.225,HOST-EVC,Customer Confidential Internal
+Dell R520,Server,Rack2 - Carson,7NQ5CZ1,,,Standalone,Customer Confidential Internal
+Dell R520,Server,Rack2 - Carson,7QN6CZ1,101.216,192.168.101.216,Host-EVC,Customer Confidential Internal
+Sophos XGS2300,Firewall,Rack2 - Carson,,101.1,192.168.101.1,Carson,
+Sophos XGS2100,Firewall,Rack2 - Carson,,199.1,192.168.199.1,Walgreens,
+Netgear GS348,Switch,Rack3 - Carson,,,,Core,
+Dell R720,Server,Rack3 - Carson,49TWHX1,,,Standalone,Customer Confidential Internal
+Dell R530,Server,Rack3 - Carson,6XGK282,,,Standalone,Customer Confidential Internal
+Dell R730,Server,Rack3 - Carson,2Q2XHH2,101.39,192.168.101.39,Host-StandAlone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,IN9KN22,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,INQKN22,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,INHHN22,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,54PM9Z1,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,1N4KN22,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,1LPMV12,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,75SPF42,,,Standalone,Customer Confidential Internal
+Dell R720,Server,Rack3 - Carson,DYXYQ12,,,Standalone,Customer Confidential Internal
+Storinator,Server/Store,Rack3 - Carson,,101.8,192.168.101.8,FreeNAS 11.1,Customer Confidential External
+Dell PC 5524,Switch,Rack1 - LN MTN,,,,core,
+Dell PC 5524,Switch,Rack1 - LN MTN,,,,iSCSI,
+Dell PC 5524,Switch,Rack1 - LN MTN,,,,iSCSI,
+Dell R520,Server,Rack1 - LN MTN,29RXK02,105.216,192.168.105.216,Host-LNMTN,Customer Confidential Internal
+Dell R520,Server,Rack1 - LN MTN,29RVK02,105.215,192.168.105.215,Host-LNMTN,Customer Confidential Internal
+Dell Equalogic,Storage,Rack1 - LN MTN,,105.22,192.168.105.22,Storage,Customer Confidential Internal
+Sophos XGS2100,Firewall,Rack1 - LN MTN,,105.1,192.168.105.1,Firewall,
+Storinator,Server/Store,Rack1 -LnMtn,,105.8,192.168.105.8,FreeNAS 11.1,Customer Confidential External

@@ -120,6 +120,9 @@ param(
     [Parameter(ParameterSetName = 'Validate')]
     [switch]$Validate,
 
+    [Parameter(ParameterSetName = 'Analyze')]
+    [switch]$Analyze,
+
     [string]$CIDRs,
     [string]$CIDRFile,
     [string]$HostFile,
@@ -138,7 +141,21 @@ param(
     [string]$FlagVersion,
     [string]$FlagLabel,
     [string]$FlagFilterFile,
-    [string]$PluginDir
+    [string]$PluginDir,
+    [switch]$SkipUpdateCheck,
+
+    # Analyze mode parameters
+    [switch]$BuildAssetTracker,
+    [switch]$BuildVulnWorkbook,
+    [switch]$UpdateAssetTracker,
+    [switch]$ViewResults,
+    [string]$PhysicalCSV,
+    [string]$VirtualCSV,
+    [string]$VCenterCSV,
+    [string]$OpenVASRoot,
+    [string]$AssetTracker,
+    [string]$VulnOutput,
+    [string]$ViewSource
 )
 
 # ============================================================
@@ -277,6 +294,55 @@ function Write-Banner {
   ============================================
 "@
     Write-Host $banner -ForegroundColor Cyan
+}
+
+function Test-GitUpdate {
+    # Check if git is available
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $gitCmd) { return }
+
+    # Check if we're in a git repo
+    $gitDir = Join-Path $PSScriptRoot ".git"
+    if (-not (Test-Path $gitDir)) { return }
+
+    # Fetch from remote
+    $fetchOutput = & git -C "$PSScriptRoot" fetch origin 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "[WARN] Could not check for updates: $fetchOutput" "WARN"
+        return
+    }
+
+    # Check how many commits behind
+    $behindCount = & git -C "$PSScriptRoot" rev-list HEAD..origin/master --count 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not ($behindCount -match '^\d+$')) { return }
+    $behindCount = [int]$behindCount
+    if ($behindCount -eq 0) { return }
+
+    # In non-interactive mode, just warn and continue
+    if ($NoMenu) {
+        Write-Log "[UPDATE] ScottyScan is $behindCount commit(s) behind origin/master. Run without -NoMenu to update, or use 'git pull' manually." "WARN"
+        return
+    }
+
+    Write-Host ""
+    Write-Host "  [UPDATE] ScottyScan is $behindCount commit(s) behind origin/master." -ForegroundColor Yellow
+    $response = Read-Host "  Do you want to pull the latest changes and restart? (Y/N)"
+
+    if ($response -match '^[Yy]') {
+        Write-Host "  Pulling latest changes..." -ForegroundColor Cyan
+        $pullOutput = & git -C "$PSScriptRoot" pull origin master 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "[WARN] Pull failed: $pullOutput" "WARN"
+            Write-Host "  [WARN] Pull failed. Continuing with current version." -ForegroundColor Yellow
+            Write-Host ""
+            return
+        }
+        Write-Host "  Update complete. Restarting..." -ForegroundColor Green
+        Write-Host ""
+        & $PSCommandPath @PSBoundParameters
+        exit
+    }
+    Write-Host ""
 }
 
 function Write-Section {
@@ -4094,6 +4160,1788 @@ function Export-Results {
 }
 
 # ============================================================
+#  ANALYZE MODE - Vulnerability Results Analyzer & Report Builder
+#  Issues #7-#13: XLSX engine, CSV parsers, Asset Tracker,
+#  OpenVAS workbook, Interactive viewer, Integration
+# ============================================================
+
+# --- #8: XLSX Output Engine (ImportExcel) ---
+
+function Assert-ImportExcel {
+    <#
+    .SYNOPSIS
+        Ensures the ImportExcel module is available. Prompts to install if missing.
+    #>
+    if (Get-Module -ListAvailable -Name ImportExcel) { return $true }
+    Write-Host ""
+    Write-Host "  The ImportExcel module is required for Analyze mode." -ForegroundColor Yellow
+    Write-Host "  Install it now? (Y/N) " -ForegroundColor Yellow -NoNewline
+    $key = [Console]::ReadKey($true)
+    Write-Host ""
+    if ($key.Key -eq [ConsoleKey]::Y) {
+        try {
+            Install-Module -Name ImportExcel -Scope CurrentUser -Force -ErrorAction Stop
+            Import-Module ImportExcel -ErrorAction Stop
+            Write-Log "ImportExcel module installed successfully."
+            return $true
+        } catch {
+            Write-Log "Failed to install ImportExcel: $_" "ERROR"
+            return $false
+        }
+    }
+    Write-Log "ImportExcel is required. Install with: Install-Module ImportExcel -Scope CurrentUser" "ERROR"
+    return $false
+}
+
+function Write-AnalyzeSheet {
+    <#
+    .SYNOPSIS
+        Exports data to a sheet in an Excel workbook with auto-fit and optional auto-filter.
+    #>
+    param(
+        [string]$Path,
+        [string]$SheetName,
+        [array]$InputData,
+        [switch]$AutoFilter,
+        [switch]$AutoFit,
+        [hashtable]$HideRowsWhere,
+        [int]$MaxColWidth = 80,
+        [switch]$Append
+    )
+    if (-not $InputData -or $InputData.Count -eq 0) {
+        $InputData = @()
+    }
+
+    $params = @{
+        Path          = $Path
+        WorksheetName = $SheetName
+        ClearSheet    = $true
+        PassThru      = $true
+    }
+    if ($AutoFilter) { $params.AutoFilter = $true }
+    if ($AutoFit)    { $params.AutoSize   = $true }
+
+    $pkg = $InputData | Export-Excel @params
+
+    # Apply max column width cap and minimum width
+    $ws = $pkg.Workbook.Worksheets[$SheetName]
+    if ($ws -and $ws.Dimension) {
+        for ($c = 1; $c -le $ws.Dimension.End.Column; $c++) {
+            if ($ws.Column($c).Width -gt $MaxColWidth) {
+                $ws.Column($c).Width = $MaxColWidth
+            }
+            if ($ws.Column($c).Width -lt 10) {
+                $ws.Column($c).Width = 10
+            }
+        }
+
+        # Hide rows matching filter criteria
+        if ($HideRowsWhere) {
+            $headerRow = 1
+            foreach ($colName in $HideRowsWhere.Keys) {
+                $colIdx = -1
+                for ($c = 1; $c -le $ws.Dimension.End.Column; $c++) {
+                    if ($ws.Cells[$headerRow, $c].Text -eq $colName) {
+                        $colIdx = $c
+                        break
+                    }
+                }
+                if ($colIdx -gt 0) {
+                    $blockedVals = @($HideRowsWhere[$colName] | ForEach-Object { $_.ToLower() })
+                    for ($r = 2; $r -le $ws.Dimension.End.Row; $r++) {
+                        $cellVal = "$($ws.Cells[$r, $colIdx].Text)".Trim().ToLower()
+                        if ($cellVal -and $blockedVals -contains $cellVal) {
+                            $ws.Row($r).Hidden = $true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $pkg.Save()
+    $pkg.Dispose()
+}
+
+function Read-ExcelSheet {
+    <#
+    .SYNOPSIS
+        Reads a sheet from an XLSX file into an array of PSObjects.
+    #>
+    param([string]$Path, [string]$SheetName)
+    if (-not (Test-Path $Path)) { return @() }
+    try {
+        $data = Import-Excel -Path $Path -WorksheetName $SheetName -ErrorAction Stop
+        return @($data)
+    } catch {
+        return @()
+    }
+}
+
+function Get-ExcelSheetNames {
+    <#
+    .SYNOPSIS
+        Returns the sheet names in an XLSX file.
+    #>
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return @() }
+    try {
+        return @(Get-ExcelSheetInfo -Path $Path | ForEach-Object { $_.Name })
+    } catch {
+        return @()
+    }
+}
+
+# --- #9: CSV Data Ingestion Layer ---
+
+function script:First-IPv4 {
+    <#
+    .SYNOPSIS
+        Extracts the first IPv4 address from a string. Returns $null if none found.
+    #>
+    param([string]$Text)
+    if (-not $Text) { return $null }
+    if ($Text -match '\b((?:\d{1,3}\.){3}\d{1,3})\b') {
+        return $Matches[1]
+    }
+    return $null
+}
+
+function script:Normalize-IP {
+    <#
+    .SYNOPSIS
+        Normalizes an IP address by stripping zero-padding (e.g. 192.168.001.001 -> 192.168.1.1).
+    #>
+    param([string]$IP)
+    if (-not $IP) { return "" }
+    $extracted = First-IPv4 $IP
+    if (-not $extracted) { return "" }
+    try {
+        $parts = $extracted -split '\.'
+        return (($parts | ForEach-Object { [int]$_ }) -join '.')
+    } catch {
+        return $extracted
+    }
+}
+
+function Import-OpenVASDetailed {
+    <#
+    .SYNOPSIS
+        Parses an OpenVAS detailedresults.csv into normalized PSObjects.
+        Explodes CVEs to one row per CVE, deduplicates, normalizes IP/hostname.
+    #>
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        throw "OpenVAS CSV not found: $Path"
+    }
+    Write-Log "  Loading OpenVAS detailed results: $Path"
+
+    $raw = Import-Csv -Path $Path -Encoding UTF8
+
+    # Resolve columns case-insensitively
+    $colMap = @{}
+    $wanted = @("ip","hostname","port","port protocol","cvss","severity","qod",
+                "nvt name","summary","specific result","nvt oid","cves",
+                "timestamp","affected software/os","product detection result","solution type")
+    $actualCols = @($raw | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name })
+    foreach ($target in $wanted) {
+        foreach ($actual in $actualCols) {
+            if ($actual.Trim().ToLower() -eq $target) {
+                $colMap[$target] = $actual
+                break
+            }
+        }
+    }
+
+    # Validate required columns
+    foreach ($req in @("ip","hostname","severity")) {
+        if (-not $colMap.ContainsKey($req)) {
+            throw "OpenVAS CSV missing required column: $req (found: $($actualCols -join ', '))"
+        }
+    }
+
+    $results = [System.Collections.ArrayList]::new()
+    $dedup = @{}
+
+    foreach ($row in $raw) {
+        $ipRaw = "$($row.($colMap['ip']))".Trim()
+        $ip = Normalize-IP $ipRaw
+        if (-not $ip) { continue }
+
+        $hostname = "$($row.($colMap['hostname']))".Trim().ToLower()
+        $port = if ($colMap.ContainsKey('port')) { "$($row.($colMap['port']))".Trim() } else { "" }
+        $protocol = if ($colMap.ContainsKey('port protocol')) { "$($row.($colMap['port protocol']))".Trim() } else { "" }
+        $cvssStr = if ($colMap.ContainsKey('cvss')) { "$($row.($colMap['cvss']))".Trim() } else { "" }
+        $severity = "$($row.($colMap['severity']))".Trim()
+        $qodStr = if ($colMap.ContainsKey('qod')) { "$($row.($colMap['qod']))".Trim() } else { "" }
+        $nvtName = if ($colMap.ContainsKey('nvt name')) { "$($row.($colMap['nvt name']))".Trim() } else { "" }
+        $nvtOid = if ($colMap.ContainsKey('nvt oid')) { "$($row.($colMap['nvt oid']))".Trim() } else { "" }
+        $cvesRaw = if ($colMap.ContainsKey('cves')) { "$($row.($colMap['cves']))".Trim() } else { "" }
+        $timestamp = if ($colMap.ContainsKey('timestamp')) { "$($row.($colMap['timestamp']))".Trim() } else { "" }
+        $affectedSw = if ($colMap.ContainsKey('affected software/os')) { "$($row.($colMap['affected software/os']))".Trim() } else { "" }
+        $productDet = if ($colMap.ContainsKey('product detection result')) { "$($row.($colMap['product detection result']))".Trim() } else { "" }
+        $summary = if ($colMap.ContainsKey('summary')) { "$($row.($colMap['summary']))".Trim() } else { "" }
+        $specificResult = if ($colMap.ContainsKey('specific result')) { "$($row.($colMap['specific result']))".Trim() } else { "" }
+        $solutionType = if ($colMap.ContainsKey('solution type')) { "$($row.($colMap['solution type']))".Trim() } else { "" }
+
+        # Parse CVSS/QoD to numeric
+        $cvss = 0.0
+        if ($cvssStr) { try { $cvss = [double]$cvssStr } catch {} }
+        $qod = 0
+        if ($qodStr) { try { $qod = [int]$qodStr } catch {} }
+
+        # Explode CVEs
+        $cveList = @("")
+        if ($cvesRaw -and $cvesRaw -ne "NOCVE") {
+            $cveList = @($cvesRaw -split '[,\s]+' | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() })
+            if ($cveList.Count -eq 0) { $cveList = @("") }
+        }
+
+        foreach ($cve in $cveList) {
+            $dedupKey = "$ip|$hostname|$port|$nvtOid|$cve"
+            if ($dedup.ContainsKey($dedupKey)) { continue }
+            $dedup[$dedupKey] = $true
+
+            [void]$results.Add([PSCustomObject]@{
+                ip                  = $ip
+                hostname            = $hostname
+                port                = $port
+                protocol            = $protocol
+                cvss                = $cvss
+                severity            = $severity
+                qod                 = $qod
+                nvt_name            = $nvtName
+                nvt_oid             = $nvtOid
+                cve                 = $cve
+                timestamp           = $timestamp
+                affected_software_os = $affectedSw
+                product_detection   = $productDet
+                summary             = $summary
+                specific_result     = $specificResult
+                solution_type       = $solutionType
+            })
+        }
+    }
+
+    Write-Log "  Parsed $($results.Count) findings ($($dedup.Count) unique) from OpenVAS CSV"
+    return ,$results.ToArray()
+}
+
+function Import-PhysicalInventory {
+    <#
+    .SYNOPSIS
+        Parses a physical inventory CSV into normalized asset objects.
+        Handles duplicate column names (e.g. "IP Address" appearing twice).
+    #>
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { throw "Physical inventory CSV not found: $Path" }
+    Write-Log "  Loading physical inventory: $Path"
+
+    # Read raw lines to handle duplicate headers (Import-Csv can't handle them)
+    $lines = @(Get-Content -Path $Path -Encoding UTF8)
+    if ($lines.Count -lt 2) { Write-Log "  Empty physical inventory"; return ,@() }
+
+    $headerLine = $lines[0]
+    # Parse header, renaming duplicates
+    $headers = @($headerLine -split ',')
+    $seen = @{}
+    for ($i = 0; $i -lt $headers.Count; $i++) {
+        $h = $headers[$i].Trim()
+        if ($seen.ContainsKey($h)) {
+            $seen[$h]++
+            $headers[$i] = "$h.$($seen[$h])"
+        } else {
+            $seen[$h] = 0
+        }
+    }
+
+    # Now read the CSV with unique headers
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $newLines = @(($headers -join ','))
+        $newLines += $lines[1..($lines.Count - 1)]
+        $newLines | Out-File $tempFile -Encoding UTF8
+        $raw = Import-Csv -Path $tempFile -Encoding UTF8
+    } finally {
+        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+    }
+
+    $actualCols = @($raw | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name })
+
+    # The second "IP Address" column (renamed to "IP Address.1") has the full IP
+    $ipCol = $actualCols | Where-Object { $_ -match '(?i)^IP\s*Address\.1$' } | Select-Object -First 1
+    if (-not $ipCol) {
+        $ipCol = $actualCols | Where-Object { $_ -match '(?i)^IP\s*Address' } | Select-Object -First 1
+    }
+
+    $results = [System.Collections.ArrayList]::new()
+    foreach ($row in $raw) {
+        $ip = if ($ipCol) { Normalize-IP "$($row.$ipCol)" } else { "" }
+        [void]$results.Add([PSCustomObject]@{
+            name                = "$($row.'Device - Model')".Trim()
+            ip_address          = $ip
+            data_classification = "$($row.'Classification')".Trim()
+            type_user           = "$($row.'Type')".Trim()
+            purpose             = "$($row.'Function')".Trim()
+            dns_name            = ""
+            location            = "$($row.'Location')".Trim()
+            status              = "physical"
+            svc_tag             = "$($row.'SVC Tag')".Trim()
+            source              = "physical"
+            notes               = ""
+        })
+    }
+    Write-Log "  Loaded $($results.Count) physical assets"
+    return ,$results.ToArray()
+}
+
+function Import-VirtualInventory {
+    <#
+    .SYNOPSIS
+        Parses a virtual inventory CSV (CVI25 format) into normalized asset objects.
+    #>
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { throw "Virtual inventory CSV not found: $Path" }
+    Write-Log "  Loading virtual inventory: $Path"
+
+    $raw = Import-Csv -Path $Path -Encoding UTF8
+    $results = [System.Collections.ArrayList]::new()
+    foreach ($row in $raw) {
+        $ip = Normalize-IP "$($row.'IP Address')"
+        $name = "$($row.'Name')".Trim()
+        $dns = "$($row.'DNS Name')".Trim()
+        $status = "$($row.'PowerStatus_CVI_25')".Trim()
+
+        [void]$results.Add([PSCustomObject]@{
+            name                = $name
+            ip_address          = $ip
+            data_classification = "$($row.'Data Classification')".Trim()
+            type_user           = "$($row.'Type / User')".Trim()
+            purpose             = "$($row.'Purpose')".Trim()
+            dns_name            = $dns
+            location            = "virtual"
+            status              = $status
+            svc_tag             = ""
+            source              = "virtual"
+            notes               = ""
+        })
+    }
+    Write-Log "  Loaded $($results.Count) virtual assets"
+    return ,$results.ToArray()
+}
+
+function Import-VCenterExport {
+    <#
+    .SYNOPSIS
+        Parses a vCenter VM list CSV with flexible column names.
+        Returns normalized vCenter records with IP lists.
+    #>
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { throw "vCenter CSV not found: $Path" }
+    Write-Log "  Loading vCenter export: $Path"
+
+    $raw = Import-Csv -Path $Path -Encoding UTF8
+    $actualCols = @($raw | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name })
+
+    # Flexible column resolution
+    $nameCol = $actualCols | Where-Object { $_ -match '(?i)^(Name|VMName)$' } | Select-Object -First 1
+    $hostCol = $actualCols | Where-Object { $_ -match '(?i)^(Hostname|DNS Name|Guest Hostname|host_name)$' } | Select-Object -First 1
+    $powerCol = $actualCols | Where-Object { $_ -match '(?i)^(PowerState|powerstate)$' } | Select-Object -First 1
+    $vmhostCol = $actualCols | Where-Object { $_ -match '(?i)^(VMHost|Host|VM Host|ESX Host)$' } | Select-Object -First 1
+    $notesCol = $actualCols | Where-Object { $_ -match '(?i)^(Notes|Annotation|notes)$' } | Select-Object -First 1
+    $multiIpCol = $actualCols | Where-Object { $_ -match '(?i)^(IPAddresses|IP Addresses|Guest IP Address|Guest IP Addresses)$' } | Select-Object -First 1
+    $singleIpCol = $actualCols | Where-Object { $_ -match '(?i)^(IP Address|IP|ip_address)$' } | Select-Object -First 1
+
+    # Parse timestamp from filename
+    $vcTs = ""
+    if ($Path -match 'vsphere_vmlist_(\d{8})-(\d{6})') {
+        $vcTs = $Matches[0]
+    }
+
+    $results = [System.Collections.ArrayList]::new()
+    foreach ($row in $raw) {
+        $vcName = if ($nameCol) { "$($row.$nameCol)".Trim().ToLower() } else { "" }
+        $vcHost = if ($hostCol) { "$($row.$hostCol)".Trim().ToLower() } else { "" }
+        $vcPower = if ($powerCol) { "$($row.$powerCol)".Trim() } else { "" }
+        $vcVmhost = if ($vmhostCol) { "$($row.$vmhostCol)".Trim() } else { "" }
+        $vcNotes = if ($notesCol) { "$($row.$notesCol)".Trim() } else { "" }
+
+        # Extract all IPv4 addresses
+        $ipText = ""
+        if ($multiIpCol) { $ipText = "$($row.$multiIpCol)" }
+        elseif ($singleIpCol) { $ipText = "$($row.$singleIpCol)" }
+
+        $ipList = @()
+        if ($ipText) {
+            $ipList = @([regex]::Matches($ipText, '\b((?:\d{1,3}\.){3}\d{1,3})\b') | ForEach-Object { $_.Groups[1].Value })
+        }
+        $primaryIP = if ($ipList.Count -gt 0) { $ipList[0] } else { "" }
+
+        [void]$results.Add([PSCustomObject]@{
+            vc_name       = $vcName
+            vc_host       = $vcHost
+            vc_powerstate = $vcPower
+            vc_vmhost     = $vcVmhost
+            vc_notes      = $vcNotes
+            ip_addresses  = $ipList
+            ip_address    = $primaryIP
+            vc_timestamp  = $vcTs
+        })
+    }
+    Write-Log "  Loaded $($results.Count) vCenter VMs"
+    return ,$results.ToArray()
+}
+
+function Find-NewestDetailedResults {
+    <#
+    .SYNOPSIS
+        Recursively finds the newest detailedresults.csv under a root folder.
+    #>
+    param([string]$Root)
+    $files = @(Get-ChildItem -Path $Root -Recurse -Filter "detailedresults.csv" -File -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) {
+        # Provide helpful hints
+        $csvHints = @(Get-ChildItem -Path $Root -Recurse -Include "*detailed*results*.csv","*openvas*.csv" -File -ErrorAction SilentlyContinue | Select-Object -First 5)
+        $zipHints = @(Get-ChildItem -Path $Root -Recurse -Filter "*.zip" -File -ErrorAction SilentlyContinue | Select-Object -First 5)
+        $msg = "No detailedresults.csv found under $Root"
+        if ($csvHints.Count -gt 0) {
+            $msg += "`n  Related CSVs found: $($csvHints.FullName -join ', ')"
+        }
+        if ($zipHints.Count -gt 0) {
+            $msg += "`n  Zip files found (extract first?): $($zipHints.FullName -join ', ')"
+        }
+        throw $msg
+    }
+    $newest = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    return $newest.FullName
+}
+
+function Import-OpenVASForAssetTracker {
+    <#
+    .SYNOPSIS
+        Parses OpenVAS data specifically for the Asset Tracker builder.
+        Returns (ip_set, hostname_set, cpe_map) for enrichment.
+    #>
+    param([string]$Root)
+    $csvPath = Find-NewestDetailedResults $Root
+    Write-Log "  Parsing OpenVAS for asset enrichment: $csvPath"
+
+    $raw = Import-Csv -Path $csvPath -Encoding UTF8
+    $actualCols = @($raw | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name })
+
+    # Resolve columns
+    $ipCol = $actualCols | Where-Object { $_.Trim().ToLower() -eq 'ip' } | Select-Object -First 1
+    $hostCol = $actualCols | Where-Object { $_.Trim().ToLower() -eq 'hostname' } | Select-Object -First 1
+    $cpeCols = @($actualCols | Where-Object { $_ -in @("Affected Software/OS","Product Detection Result","Specific Result","Summary") })
+
+    if (-not $ipCol -or -not $hostCol) {
+        throw "OpenVAS CSV must contain 'IP' and 'Hostname' columns."
+    }
+
+    $ipSet = @{}
+    $hostSet = @{}
+    $cpeMap = @{}
+    $cpeRe = [regex]'(cpe:/[aoh]:[^,\s"'']+)'
+
+    foreach ($row in $raw) {
+        $ipRaw = "$($row.$ipCol)".Trim()
+        $ip = Normalize-IP $ipRaw
+        $hostRaw = "$($row.$hostCol)".Trim().ToLower()
+
+        if ($hostRaw) { $hostSet[$hostRaw] = $true }
+        if (-not $ip) { continue }
+        $ipSet[$ip] = $true
+
+        # Collect CPEs
+        foreach ($col in $cpeCols) {
+            $text = "$($row.$col)"
+            if (-not $text) { continue }
+            foreach ($m in $cpeRe.Matches($text)) {
+                $cpe = $m.Groups[1].Value.ToLower()
+                if (-not $cpeMap.ContainsKey($ip)) { $cpeMap[$ip] = @{} }
+                $cpeMap[$ip][$cpe] = $true
+            }
+        }
+    }
+
+    return @{
+        IPSet    = $ipSet
+        HostSet  = $hostSet
+        CPEMap   = $cpeMap
+        CSVPath  = $csvPath
+    }
+}
+
+# --- #10: Asset Tracker Builder ---
+
+function Build-AssetTracker {
+    <#
+    .SYNOPSIS
+        Builds Asset_Tracker.xlsx from physical, virtual, vCenter, and OpenVAS sources.
+        Ported from legacy/IAVT_Script/infra_asset_vuln_tool.py build_asset_tracker().
+    #>
+    param(
+        [string]$PhysicalCSV,
+        [string]$VirtualCSV,
+        [string]$VCenterCSV,
+        [string]$OpenVASRoot,
+        [string]$OutputPath
+    )
+
+    Write-Log "Building Asset Tracker..." "INFO"
+    Write-Section "Phase 1: Loading Data Sources"
+
+    $physical = Import-PhysicalInventory $PhysicalCSV
+    $virtual = Import-VirtualInventory $VirtualCSV
+    $vcenter = Import-VCenterExport $VCenterCSV
+    $ov = Import-OpenVASForAssetTracker $OpenVASRoot
+
+    Write-Section "Phase 2: Building Base Asset Set"
+
+    # Combine physical + virtual
+    $assets = [System.Collections.ArrayList]::new()
+    foreach ($a in $physical) { [void]$assets.Add($a.PSObject.Copy()) }
+    foreach ($a in $virtual)  { [void]$assets.Add($a.PSObject.Copy()) }
+
+    # Normalize names to lowercase
+    foreach ($a in $assets) {
+        $a.name = "$($a.name)".ToLower().Trim()
+        $a.dns_name = "$($a.dns_name)".ToLower().Trim()
+    }
+
+    Write-Log "  Combined base: $($assets.Count) assets ($($physical.Count) physical + $($virtual.Count) virtual)"
+
+    # Build vCenter lookup maps
+    $vcIpMap = @{}
+    $vcNameMap = @{}
+    foreach ($vc in $vcenter) {
+        foreach ($ip in $vc.ip_addresses) {
+            if ($ip) { $vcIpMap[$ip.ToLower()] = $vc }
+        }
+        if ($vc.vc_name) { if (-not $vcNameMap.ContainsKey($vc.vc_name)) { $vcNameMap[$vc.vc_name] = @() }; $vcNameMap[$vc.vc_name] += $vc }
+        if ($vc.vc_host) { if (-not $vcNameMap.ContainsKey($vc.vc_host)) { $vcNameMap[$vc.vc_host] = @() }; $vcNameMap[$vc.vc_host] += $vc }
+    }
+
+    Write-Section "Phase 3: vCenter Status Sync"
+    $matchCount = 0
+
+    foreach ($a in $assets) {
+        $hit = $null
+        # Match by IP first
+        $aIP = "$($a.ip_address)".ToLower()
+        if ($aIP -and $vcIpMap.ContainsKey($aIP)) {
+            $hit = $vcIpMap[$aIP]
+        }
+        # Then by name/dns_name (unique match only)
+        if (-not $hit) {
+            $candidates = @{}
+            foreach ($key in @($a.name, $a.dns_name)) {
+                if ($key -and $vcNameMap.ContainsKey($key)) {
+                    foreach ($c in $vcNameMap[$key]) {
+                        $k = "$($c.vc_name)|$($c.vc_host)|$($c.vc_vmhost)"
+                        $candidates[$k] = $c
+                    }
+                }
+            }
+            if ($candidates.Count -eq 1) {
+                $hit = @($candidates.Values)[0]
+            }
+        }
+
+        if ($hit) {
+            $matchCount++
+            $a.status = if ($hit.vc_powerstate) { $hit.vc_powerstate } else { $a.status }
+            if ($a.source -eq "virtual" -and $hit.vc_vmhost) {
+                $a.location = $hit.vc_vmhost
+            }
+            if ($hit.vc_notes -and $hit.vc_notes -ne $a.notes -and ("$($a.notes)" -notmatch [regex]::Escape($hit.vc_notes))) {
+                $a.notes = if ($a.notes) { "$($a.notes); $($hit.vc_notes)" } else { $hit.vc_notes }
+            }
+        } else {
+            if ($a.source -eq "virtual") {
+                $a.status = "not in vcenter"
+                $note = "machine presumed offline -- unless OpenVAS says otherwise"
+                if ($a.notes -and $a.notes -notmatch [regex]::Escape($note)) {
+                    $a.notes = "$($a.notes); $note"
+                } elseif (-not $a.notes) {
+                    $a.notes = $note
+                }
+            }
+        }
+    }
+    Write-Log "  vCenter matched: $matchCount assets"
+
+    Write-Section "Phase 4: OpenVAS Enrichment"
+    $knownIPs = @{}
+    foreach ($a in $assets) { if ($a.ip_address) { $knownIPs[$a.ip_address.ToLower()] = $true } }
+
+    $flippedCount = 0
+    $addedCount = 0
+
+    # Flip "not in vcenter" -> "online" when seen in OpenVAS
+    foreach ($a in $assets) {
+        if ("$($a.status)".ToLower() -ne "not in vcenter") { continue }
+        $seen = $false
+        $aIP = "$($a.ip_address)".ToLower()
+        if ($aIP -and $ov.IPSet.ContainsKey($aIP)) { $seen = $true }
+        if (-not $seen) {
+            foreach ($key in @($a.name, $a.dns_name)) {
+                if ($key -and $ov.HostSet.ContainsKey($key)) { $seen = $true; break }
+            }
+        }
+        if ($seen) {
+            $a.status = "online"
+            $old = "machine presumed offline -- unless OpenVAS says otherwise"
+            $new = "machine was not found in vcenter but is in OpenVAS results"
+            $a.notes = "$($a.notes)" -replace [regex]::Escape("; $old"), "" -replace [regex]::Escape($old), ""
+            $a.notes = $a.notes.Trim()
+            if ($a.notes -notmatch [regex]::Escape($new)) {
+                $a.notes = if ($a.notes) { "$($a.notes); $new" } else { $new }
+            }
+            $flippedCount++
+        }
+    }
+
+    # Add net-new IPs from OpenVAS
+    foreach ($ip in ($ov.IPSet.Keys | Sort-Object)) {
+        if (-not $knownIPs.ContainsKey($ip.ToLower())) {
+            $notes = ""
+            if ($ov.CPEMap.ContainsKey($ip)) {
+                $cpes = @($ov.CPEMap[$ip].Keys)
+                $osGuess = $cpes | Where-Object { $_ -match '^cpe:/o:' } | Select-Object -First 1
+                if (-not $osGuess) { $osGuess = $cpes | Where-Object { $_ -match '^cpe:/a:' } | Select-Object -First 1 }
+                if ($osGuess) { $notes = "Found OS: $osGuess" }
+            }
+            [void]$assets.Add([PSCustomObject]@{
+                name                = ""
+                ip_address          = $ip
+                data_classification = ""
+                type_user           = ""
+                purpose             = ""
+                dns_name            = ""
+                location            = ""
+                status              = "found in scan"
+                svc_tag             = ""
+                source              = "openvas"
+                notes               = $notes
+            })
+            $addedCount++
+        }
+    }
+
+    # Also enrich existing "found in scan" rows with OS guess
+    foreach ($a in $assets) {
+        if ("$($a.status)".ToLower() -ne "found in scan") { continue }
+        $aIP = "$($a.ip_address)".ToLower()
+        if ($aIP -and $ov.CPEMap.ContainsKey($aIP) -and -not $a.notes) {
+            $cpes = @($ov.CPEMap[$aIP].Keys)
+            $osGuess = $cpes | Where-Object { $_ -match '^cpe:/o:' } | Select-Object -First 1
+            if (-not $osGuess) { $osGuess = $cpes | Where-Object { $_ -match '^cpe:/a:' } | Select-Object -First 1 }
+            if ($osGuess) { $a.notes = "Found OS: $osGuess" }
+        }
+    }
+
+    Write-Log "  OpenVAS: flipped $flippedCount to online, added $addedCount new IPs"
+
+    # Canonicalize status values
+    foreach ($a in $assets) {
+        $s = "$($a.status)".Trim()
+        switch -Regex ($s) {
+            '(?i)^powered\s*off$'         { $a.status = "PoweredOff" }
+            '(?i)^powered\s*on$'          { $a.status = "PoweredOn" }
+            '(?i)^not\s*in\s*v?\s*center$' { $a.status = "not in vcenter" }
+            '(?i)^found\s*in\s*scan$'     { $a.status = "found in scan" }
+            '(?i)^online$'                { $a.status = "online" }
+            '(?i)^physical$'              { $a.status = "physical" }
+        }
+    }
+
+    # Sort by IP then name
+    $sorted = $assets | Sort-Object {
+        $ip = $_.ip_address
+        if (-not $ip) { return @(999,999,999,999) }
+        try { $parts = $ip -split '\.' | ForEach-Object { [int]$_ }; return $parts } catch { return @(999,999,999,999) }
+    }, { $_.name }
+
+    Write-Section "Phase 5: Writing Asset_Tracker.xlsx"
+
+    # Ensure output directory
+    $outFolder = Split-Path $OutputPath -Parent
+    if ($outFolder -and -not (Test-Path $outFolder)) { New-Item -ItemType Directory -Path $outFolder -Force | Out-Null }
+
+    # Main asset_tracker sheet
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "asset_tracker" -InputData $sorted `
+        -AutoFilter -AutoFit -HideRowsWhere @{ "status" = @("PoweredOff","not in vcenter") }
+
+    # Original input sheets (physical CSV may have duplicate headers, use the already-parsed data)
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "physical_inventory_2024" -InputData $physical -AutoFit -Append
+
+    $virtRaw = Import-Csv -Path $VirtualCSV -Encoding UTF8
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "virtual_inventory_2024" -InputData $virtRaw -AutoFit -Append
+
+    $vcRaw = Import-Csv -Path $VCenterCSV -Encoding UTF8
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "vCenter_View" -InputData $vcRaw -AutoFit -Append
+
+    # Asset IPs helper sheet (one row per IP from vCenter)
+    $assetIPs = [System.Collections.ArrayList]::new()
+    foreach ($vc in $vcenter) {
+        foreach ($ip in $vc.ip_addresses) {
+            $extracted = First-IPv4 $ip
+            if (-not $extracted) { continue }
+            [void]$assetIPs.Add([PSCustomObject]@{
+                name         = $vc.vc_name
+                dns_name     = $vc.vc_host
+                ip_address   = $extracted
+                vc_powerstate = $vc.vc_powerstate
+                vc_vmhost    = $vc.vc_vmhost
+                vc_timestamp = $vc.vc_timestamp
+            })
+        }
+    }
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "asset_ips" -InputData $assetIPs -AutoFit -Append
+
+    # Meta sheet
+    $meta = @([PSCustomObject]@{
+        openvas_csv_path             = $ov.CSVPath
+        vcenter_inventory_timestamp  = $vcenter[0].vc_timestamp
+        generated_at                 = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
+    })
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "_meta" -InputData $meta -AutoFit -Append
+
+    Write-Log "  Asset Tracker written: $OutputPath ($($sorted.Count) assets)" "INFO"
+    return $OutputPath
+}
+
+function Update-AssetTracker {
+    <#
+    .SYNOPSIS
+        Incrementally updates an existing Asset_Tracker.xlsx with new vCenter and/or OpenVAS data.
+    #>
+    param(
+        [string]$TrackerPath,
+        [string]$VCenterCSV,
+        [string]$OpenVASRoot
+    )
+
+    if (-not (Test-Path $TrackerPath)) { throw "Asset Tracker not found: $TrackerPath" }
+    Write-Log "Updating Asset Tracker: $TrackerPath" "INFO"
+
+    # Backup
+    $backupName = [System.IO.Path]::GetFileNameWithoutExtension($TrackerPath) + "_" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".xlsx"
+    $backupPath = Join-Path (Split-Path $TrackerPath -Parent) $backupName
+    Copy-Item $TrackerPath $backupPath -Force
+    Write-Log "  Backed up to: $backupPath"
+
+    # Load existing tracker
+    $existing = Read-ExcelSheet -Path $TrackerPath -SheetName "asset_tracker"
+    if ($existing.Count -eq 0) { throw "No data in asset_tracker sheet" }
+
+    # Normalize
+    foreach ($a in $existing) {
+        if ($a.PSObject.Properties.Name -contains 'name') { $a.name = "$($a.name)".Trim().ToLower() }
+        if ($a.PSObject.Properties.Name -contains 'dns_name') { $a.dns_name = "$($a.dns_name)".Trim().ToLower() }
+        if ($a.PSObject.Properties.Name -contains 'ip_address') { $a.ip_address = "$($a.ip_address)".Trim() }
+    }
+
+    # Optional vCenter refresh
+    if ($VCenterCSV) {
+        Write-Section "vCenter Refresh"
+        $vcenter = Import-VCenterExport $VCenterCSV
+
+        $vcIpMap = @{}
+        $vcNameMap = @{}
+        foreach ($vc in $vcenter) {
+            foreach ($ip in $vc.ip_addresses) {
+                if ($ip) { $vcIpMap[$ip.ToLower()] = $vc }
+            }
+            if ($vc.vc_name) { if (-not $vcNameMap.ContainsKey($vc.vc_name)) { $vcNameMap[$vc.vc_name] = @() }; $vcNameMap[$vc.vc_name] += $vc }
+            if ($vc.vc_host) { if (-not $vcNameMap.ContainsKey($vc.vc_host)) { $vcNameMap[$vc.vc_host] = @() }; $vcNameMap[$vc.vc_host] += $vc }
+        }
+
+        foreach ($a in $existing) {
+            $hit = $null
+            $aIP = "$($a.ip_address)".ToLower()
+            if ($aIP -and $vcIpMap.ContainsKey($aIP)) { $hit = $vcIpMap[$aIP] }
+            if (-not $hit) {
+                $candidates = @{}
+                foreach ($key in @("$($a.name)", "$($a.dns_name)")) {
+                    if ($key -and $vcNameMap.ContainsKey($key)) {
+                        foreach ($c in $vcNameMap[$key]) { $candidates["$($c.vc_name)|$($c.vc_host)"] = $c }
+                    }
+                }
+                if ($candidates.Count -eq 1) { $hit = @($candidates.Values)[0] }
+            }
+
+            if ($hit) {
+                $a.status = if ($hit.vc_powerstate) { $hit.vc_powerstate } else { $a.status }
+                if ("$($a.source)" -eq "virtual" -and $hit.vc_vmhost) { $a.location = $hit.vc_vmhost }
+                $old = "machine presumed offline -- unless OpenVAS says otherwise"
+                $a.notes = "$($a.notes)" -replace [regex]::Escape("; $old"), "" -replace [regex]::Escape($old), ""
+                if ($hit.vc_notes -and "$($a.notes)" -notmatch [regex]::Escape($hit.vc_notes)) {
+                    $a.notes = if ($a.notes) { "$($a.notes); $($hit.vc_notes)" } else { $hit.vc_notes }
+                }
+            } else {
+                if ("$($a.source)" -eq "virtual") {
+                    $curLower = "$($a.status)".ToLower()
+                    if ($curLower -notin @("not in vcenter","online")) {
+                        $a.status = "not in vcenter"
+                        $note = "machine presumed offline -- unless OpenVAS says otherwise"
+                        if ("$($a.notes)" -notmatch [regex]::Escape($note)) {
+                            $a.notes = if ($a.notes) { "$($a.notes); $note" } else { $note }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    # Optional OpenVAS refresh
+    if ($OpenVASRoot) {
+        Write-Section "OpenVAS Refresh"
+        $ov = Import-OpenVASForAssetTracker $OpenVASRoot
+        $knownIPs = @{}
+        foreach ($a in $existing) { if ($a.ip_address) { $knownIPs[$a.ip_address.ToLower()] = $true } }
+
+        foreach ($a in $existing) {
+            if ("$($a.status)".ToLower() -ne "not in vcenter") { continue }
+            $seen = $false
+            $aIP = "$($a.ip_address)".ToLower()
+            if ($aIP -and $ov.IPSet.ContainsKey($aIP)) { $seen = $true }
+            if (-not $seen) {
+                foreach ($key in @("$($a.name)","$($a.dns_name)")) {
+                    if ($key -and $ov.HostSet.ContainsKey($key)) { $seen = $true; break }
+                }
+            }
+            if ($seen) {
+                $a.status = "online"
+                $old = "machine presumed offline -- unless OpenVAS says otherwise"
+                $new = "machine was not found in vcenter but is in OpenVAS results"
+                $a.notes = "$($a.notes)" -replace [regex]::Escape("; $old"), "" -replace [regex]::Escape($old), ""
+                $a.notes = $a.notes.Trim()
+                if ("$($a.notes)" -notmatch [regex]::Escape($new)) {
+                    $a.notes = if ($a.notes) { "$($a.notes); $new" } else { $new }
+                }
+            }
+        }
+
+        # Add net-new IPs
+        $existingList = [System.Collections.ArrayList]::new($existing)
+        foreach ($ip in ($ov.IPSet.Keys | Sort-Object)) {
+            if (-not $knownIPs.ContainsKey($ip.ToLower())) {
+                $notes = ""
+                if ($ov.CPEMap.ContainsKey($ip)) {
+                    $cpes = @($ov.CPEMap[$ip].Keys)
+                    $osGuess = $cpes | Where-Object { $_ -match '^cpe:/o:' } | Select-Object -First 1
+                    if (-not $osGuess) { $osGuess = $cpes | Where-Object { $_ -match '^cpe:/a:' } | Select-Object -First 1 }
+                    if ($osGuess) { $notes = "Found OS: $osGuess" }
+                }
+                [void]$existingList.Add([PSCustomObject]@{
+                    name = ""; ip_address = $ip; data_classification = ""; type_user = ""
+                    purpose = ""; dns_name = ""; location = ""; status = "found in scan"
+                    svc_tag = ""; source = "openvas"; notes = $notes
+                })
+            }
+        }
+        $existing = $existingList.ToArray()
+    }
+
+    # Canonicalize and sort
+    foreach ($a in $existing) {
+        $s = "$($a.status)".Trim()
+        switch -Regex ($s) {
+            '(?i)^powered\s*off$'         { $a.status = "PoweredOff" }
+            '(?i)^powered\s*on$'          { $a.status = "PoweredOn" }
+            '(?i)^not\s*in\s*v?\s*center$' { $a.status = "not in vcenter" }
+            '(?i)^found\s*in\s*scan$'     { $a.status = "found in scan" }
+            '(?i)^online$'                { $a.status = "online" }
+            '(?i)^physical$'              { $a.status = "physical" }
+        }
+    }
+
+    $sorted = $existing | Sort-Object {
+        $ip = $_.ip_address
+        if (-not $ip) { return @(999,999,999,999) }
+        try { return ($ip -split '\.' | ForEach-Object { [int]$_ }) } catch { return @(999,999,999,999) }
+    }, { $_.name }
+
+    # Write updated workbook
+    Write-AnalyzeSheet -Path $TrackerPath -SheetName "asset_tracker" -InputData $sorted `
+        -AutoFilter -AutoFit -HideRowsWhere @{ "status" = @("PoweredOff","not in vcenter") }
+
+    # Preserve other sheets from backup, update vCenter if refreshed
+    $sheetNames = Get-ExcelSheetNames $backupPath
+    foreach ($sn in $sheetNames) {
+        if ($sn -eq "asset_tracker") { continue }
+        if ($sn -eq "vCenter_View" -and $VCenterCSV) { continue }
+        if ($sn -eq "asset_ips" -and $VCenterCSV) { continue }
+        if ($sn -eq "_meta") { continue }
+        $data = Read-ExcelSheet -Path $backupPath -SheetName $sn
+        Write-AnalyzeSheet -Path $TrackerPath -SheetName $sn -InputData $data -AutoFit -Append
+    }
+
+    if ($VCenterCSV) {
+        $vcRaw = Import-Csv -Path $VCenterCSV -Encoding UTF8
+        Write-AnalyzeSheet -Path $TrackerPath -SheetName "vCenter_View" -InputData $vcRaw -AutoFit -Append
+
+        $vcenter = Import-VCenterExport $VCenterCSV
+        $assetIPs = [System.Collections.ArrayList]::new()
+        foreach ($vc in $vcenter) {
+            foreach ($ip in $vc.ip_addresses) {
+                $extracted = First-IPv4 $ip
+                if (-not $extracted) { continue }
+                [void]$assetIPs.Add([PSCustomObject]@{
+                    name = $vc.vc_name; dns_name = $vc.vc_host; ip_address = $extracted
+                    vc_powerstate = $vc.vc_powerstate; vc_vmhost = $vc.vc_vmhost; vc_timestamp = $vc.vc_timestamp
+                })
+            }
+        }
+        Write-AnalyzeSheet -Path $TrackerPath -SheetName "asset_ips" -InputData $assetIPs -AutoFit -Append
+    }
+
+    # Meta
+    $meta = @([PSCustomObject]@{
+        openvas_csv_path = if ($OpenVASRoot) { (Find-NewestDetailedResults $OpenVASRoot) } else { "" }
+        vcenter_inventory_timestamp = ""
+        generated_at = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
+        baseline = $TrackerPath
+    })
+    Write-AnalyzeSheet -Path $TrackerPath -SheetName "_meta" -InputData $meta -AutoFit -Append
+
+    Write-Log "  Asset Tracker updated: $TrackerPath ($($sorted.Count) assets)" "INFO"
+    return $TrackerPath
+}
+
+# --- #11: OpenVAS Workbook Builder ---
+
+function Build-OpenVASWorkbook {
+    <#
+    .SYNOPSIS
+        Builds/extends OpenVAS_25.xlsx with summary rollups and per-scan detail sheets.
+        Ported from legacy/IAVT_Script/openvas_25_builder.py.
+    #>
+    param(
+        [string]$AssetTrackerPath,
+        [string]$OpenVASRoot,
+        [string]$OutputPath
+    )
+
+    Write-Log "Building OpenVAS Workbook..." "INFO"
+
+    # Load asset tracker for enrichment
+    Write-Section "Loading Asset Tracker"
+    $ipMap = @{}
+    $hostMap = @{}
+    if ($AssetTrackerPath -and (Test-Path $AssetTrackerPath)) {
+        $tracker = Read-ExcelSheet -Path $AssetTrackerPath -SheetName "asset_tracker"
+        foreach ($row in $tracker) {
+            $ip = "$($row.ip_address)".Trim().ToLower()
+            $nm = "$($row.name)".Trim().ToLower()
+            $dn = "$($row.dns_name)".Trim().ToLower()
+            if ($ip) { $ipMap[$ip] = $row }
+            if ($nm) { $hostMap[$nm] = $row }
+            if ($dn) { $hostMap[$dn] = $row }
+        }
+        Write-Log "  Asset Tracker loaded: $($tracker.Count) assets ($($ipMap.Count) IPs mapped)"
+    } else {
+        Write-Log "  No Asset Tracker provided -- enrichment skipped" "WARN"
+    }
+
+    # Find and load OpenVAS CSV
+    Write-Section "Loading OpenVAS Data"
+    $csvPath = Find-NewestDetailedResults $OpenVASRoot
+    $ovFull = Import-OpenVASDetailed $csvPath
+
+    # Split H+M for details
+    $ovHM = @($ovFull | Where-Object { $_.severity -match '(?i)^(high|medium)$' })
+    Write-Log "  High+Medium findings: $($ovHM.Count) of $($ovFull.Count) total"
+
+    # Enrich with asset data
+    Write-Section "Enriching with Asset Data"
+    $enrichFields = @("asset_name","asset_dns_name","asset_status","asset_location","asset_source","asset_notes")
+
+    foreach ($finding in $ovFull) {
+        # Add asset enrichment properties
+        foreach ($f in $enrichFields) {
+            $finding | Add-Member -NotePropertyName $f -NotePropertyValue "" -Force
+        }
+        $match = $null
+        $fIP = "$($finding.ip)".ToLower()
+        $fHost = "$($finding.hostname)".ToLower()
+        if ($fIP -and $ipMap.ContainsKey($fIP)) { $match = $ipMap[$fIP] }
+        elseif ($fHost -and $hostMap.ContainsKey($fHost)) { $match = $hostMap[$fHost] }
+
+        if ($match) {
+            $finding.asset_name     = "$($match.name)"
+            $finding.asset_dns_name = "$($match.dns_name)"
+            $finding.asset_status   = "$($match.status)"
+            $finding.asset_location = "$($match.location)"
+            $finding.asset_source   = "$($match.source)"
+            $finding.asset_notes    = "$($match.notes)"
+        }
+    }
+
+    # Also enrich H+M subset
+    foreach ($finding in $ovHM) {
+        foreach ($f in $enrichFields) {
+            if (-not ($finding.PSObject.Properties.Name -contains $f)) {
+                $finding | Add-Member -NotePropertyName $f -NotePropertyValue "" -Force
+            }
+        }
+        $match = $null
+        $fIP = "$($finding.ip)".ToLower()
+        $fHost = "$($finding.hostname)".ToLower()
+        if ($fIP -and $ipMap.ContainsKey($fIP)) { $match = $ipMap[$fIP] }
+        elseif ($fHost -and $hostMap.ContainsKey($fHost)) { $match = $hostMap[$fHost] }
+        if ($match) {
+            $finding.asset_name     = "$($match.name)"
+            $finding.asset_dns_name = "$($match.dns_name)"
+            $finding.asset_status   = "$($match.status)"
+            $finding.asset_location = "$($match.location)"
+            $finding.asset_source   = "$($match.source)"
+            $finding.asset_notes    = "$($match.notes)"
+        }
+    }
+
+    # Determine scan date
+    $scanDate = (Get-Date).ToString("yyyy-MM-dd")
+    $tsVal = $ovFull | Where-Object { $_.timestamp } | Select-Object -First 1
+    if ($tsVal -and $tsVal.timestamp.Length -ge 10) {
+        $scanDate = $tsVal.timestamp.Substring(0, 10)
+    }
+    $scanYYMMDD = [datetime]::ParseExact($scanDate, "yyyy-MM-dd", $null).ToString("yyMMdd")
+    $detailsName = "OpenVAS_$scanYYMMDD"
+    $summaryName = "OpenVAS_Summary"
+
+    Write-Section "Building Summary"
+
+    # Pick display host: asset_name > hostname > ip
+    $displayHostLookup = @{}
+    foreach ($f in $ovFull) {
+        $nm = "$($f.asset_name)".Trim()
+        $hn = "$($f.hostname)".Trim()
+        $ip = "$($f.ip)".Trim()
+        $display = if ($nm) { $nm } elseif ($hn) { $hn } elseif ($ip) { $ip } else { "unknown" }
+        $key = "$ip|$hn"
+        $displayHostLookup[$key] = $display
+    }
+
+    # Build H+M NOW counts per display host
+    $hmCounts = @{}
+    foreach ($f in $ovHM) {
+        $key = "$($f.ip)|$($f.hostname)"
+        $display = if ($displayHostLookup.ContainsKey($key)) { $displayHostLookup[$key] } else { $f.ip }
+        if (-not $hmCounts.ContainsKey($display)) {
+            $hmCounts[$display] = @{ high = 0; medium = 0 }
+        }
+        $sev = "$($f.severity)".ToLower()
+        if ($sev -eq "high") { $hmCounts[$display].high++ }
+        elseif ($sev -eq "medium") { $hmCounts[$display].medium++ }
+    }
+
+    # Get asset fields per host
+    $assetByHost = @{}
+    foreach ($f in $ovFull) {
+        $key = "$($f.ip)|$($f.hostname)"
+        $display = if ($displayHostLookup.ContainsKey($key)) { $displayHostLookup[$key] } else { $f.ip }
+        if (-not $assetByHost.ContainsKey($display)) {
+            $assetByHost[$display] = @{
+                asset_status   = "$($f.asset_status)"
+                asset_location = "$($f.asset_location)"
+                asset_source   = "$($f.asset_source)"
+            }
+        }
+    }
+
+    # Build NOW summary rows
+    $nowRows = [System.Collections.ArrayList]::new()
+    foreach ($hk in ($hmCounts.Keys | Sort-Object)) {
+        $h = $hmCounts[$hk].high
+        $m = $hmCounts[$hk].medium
+        $asset = if ($assetByHost.ContainsKey($hk)) { $assetByHost[$hk] } else { @{ asset_status=""; asset_location=""; asset_source="" } }
+        [void]$nowRows.Add([PSCustomObject]@{
+            host             = $hk
+            high_count_now   = $h
+            medium_count_now = $m
+            totals_now       = $h + $m
+            asset_status     = $asset.asset_status
+            asset_location   = $asset.asset_location
+            asset_source     = $asset.asset_source
+        })
+    }
+
+    # Load existing workbook for accumulated scan columns
+    Write-Section "Handling Accumulated Scans"
+    $existingSummary = @()
+    $existingDetailSheets = @{}
+    $existingMeta = @()
+
+    if (Test-Path $OutputPath) {
+        $sheetNames = Get-ExcelSheetNames $OutputPath
+        if ($sheetNames -contains $summaryName) {
+            $existingSummary = @(Read-ExcelSheet -Path $OutputPath -SheetName $summaryName)
+        }
+        if ($sheetNames -contains "_meta") {
+            $existingMeta = @(Read-ExcelSheet -Path $OutputPath -SheetName "_meta")
+        }
+        foreach ($sn in $sheetNames) {
+            if ($sn -eq $summaryName -or $sn -eq "_meta" -or $sn -eq $detailsName) { continue }
+            if ($sn -match '^OpenVAS_\d{6}$') {
+                $existingDetailSheets[$sn] = @(Read-ExcelSheet -Path $OutputPath -SheetName $sn)
+            }
+        }
+    }
+
+    # Merge with existing summary
+    $summaryOut = $null
+    if ($existingSummary.Count -gt 0) {
+        $baselineName = "baseline-$scanYYMMDD-totals"
+        $scanColName = "scan-$scanYYMMDD-totals"
+
+        $existingCols = @($existingSummary[0].PSObject.Properties.Name)
+        $alreadyBaseline = $existingCols -contains $baselineName
+        $alreadyScan = $existingCols -contains $scanColName
+        $addScanCol = -not ($alreadyBaseline -or $alreadyScan)
+
+        if (-not $addScanCol) {
+            Write-Log "  Scan date $scanYYMMDD already processed; refreshing NOW + asset fields only"
+        }
+
+        # Collect prior scan columns
+        $priorScanCols = @($existingCols | Where-Object { $_ -match '^(scan-|baseline-)' })
+
+        # Build merged summary using host as key
+        $existingByHost = @{}
+        foreach ($r in $existingSummary) { $existingByHost["$($r.host)"] = $r }
+
+        $allHosts = @{}
+        foreach ($r in $existingSummary) { $allHosts["$($r.host)"] = $true }
+        foreach ($r in $nowRows) { $allHosts["$($r.host)"] = $true }
+
+        $mergedRows = [System.Collections.ArrayList]::new()
+        foreach ($hk in $allHosts.Keys) {
+            $now = $nowRows | Where-Object { $_.host -eq $hk } | Select-Object -First 1
+            $old = $existingByHost[$hk]
+
+            $row = [ordered]@{
+                host             = $hk
+                high_count_now   = if ($now) { $now.high_count_now } else { 0 }
+                medium_count_now = if ($now) { $now.medium_count_now } else { 0 }
+                totals_now       = if ($now) { $now.totals_now } else { 0 }
+                asset_status     = ""
+                asset_location   = ""
+                asset_source     = ""
+            }
+
+            # Coalesce asset fields: prefer current, fall back to prior
+            $nowStatus = if ($now) { "$($now.asset_status)".Trim() } else { "" }
+            $oldStatus = if ($old) { "$($old.asset_status)".Trim() } else { "" }
+            $row.asset_status = if ($nowStatus) { $nowStatus } else { $oldStatus }
+
+            $nowLoc = if ($now) { "$($now.asset_location)".Trim() } else { "" }
+            $oldLoc = if ($old) { "$($old.asset_location)".Trim() } else { "" }
+            $row.asset_location = if ($nowLoc) { $nowLoc } else { $oldLoc }
+
+            $nowSrc = if ($now) { "$($now.asset_source)".Trim() } else { "" }
+            $oldSrc = if ($old) { "$($old.asset_source)".Trim() } else { "" }
+            $row.asset_source = if ($nowSrc) { $nowSrc } else { $oldSrc }
+
+            # Carry forward prior scan columns
+            foreach ($pc in $priorScanCols) {
+                $row[$pc] = if ($old -and ($old.PSObject.Properties.Name -contains $pc)) { $old.$pc } else { $null }
+            }
+
+            # Add new scan column if applicable
+            if ($addScanCol) {
+                $row[$scanColName] = $row.totals_now
+            }
+
+            [void]$mergedRows.Add([PSCustomObject]$row)
+        }
+
+        # Refresh asset fields from tracker
+        foreach ($r in $mergedRows) {
+            $hostKey = "$($r.host)".Trim().ToLower()
+            $match = $null
+            if ($ipMap.ContainsKey($hostKey)) { $match = $ipMap[$hostKey] }
+            elseif ($hostMap.ContainsKey($hostKey)) { $match = $hostMap[$hostKey] }
+            if ($match) {
+                $src = "$($match.source)".Trim()
+                $loc = "$($match.location)".Trim()
+                $st = "$($match.status)".Trim()
+                if (("$($r.asset_source)" -eq "" -or "$($r.asset_source)" -eq "openvas") -and $src) { $r.asset_source = $src }
+                if ("$($r.asset_location)" -eq "" -and $loc) { $r.asset_location = $loc }
+                if ("$($r.asset_status)" -eq "" -and $st) { $r.asset_status = $st }
+            }
+        }
+
+        # Mark "not in scan" for hosts with no findings and no prior status
+        foreach ($r in $mergedRows) {
+            if ($r.totals_now -eq 0 -and "$($r.asset_status)".Trim() -eq "") {
+                $r.asset_status = "not in scan"
+            }
+        }
+
+        $summaryOut = $mergedRows | Sort-Object { -[int]$_.totals_now }, { -[int]$_.high_count_now }, { -[int]$_.medium_count_now }, host
+    } else {
+        # First run: add baseline column
+        $baselineName = "baseline-$scanYYMMDD-totals"
+        foreach ($r in $nowRows) {
+            $r | Add-Member -NotePropertyName $baselineName -NotePropertyValue $r.totals_now -Force
+        }
+        $summaryOut = $nowRows | Sort-Object { -[int]$_.totals_now }, { -[int]$_.high_count_now }, { -[int]$_.medium_count_now }, host
+        Write-Log "  First run: created baseline column $baselineName"
+    }
+
+    # Write workbook
+    Write-Section "Writing OpenVAS Workbook"
+    $outFolder = Split-Path $OutputPath -Parent
+    if ($outFolder -and -not (Test-Path $outFolder)) { New-Item -ItemType Directory -Path $outFolder -Force | Out-Null }
+
+    # Summary (first sheet)
+    Write-AnalyzeSheet -Path $OutputPath -SheetName $summaryName -InputData @($summaryOut) -AutoFilter -AutoFit
+
+    # Prior detail sheets
+    foreach ($sn in ($existingDetailSheets.Keys | Sort-Object)) {
+        Write-AnalyzeSheet -Path $OutputPath -SheetName $sn -InputData $existingDetailSheets[$sn] -AutoFit -Append
+    }
+
+    # Current detail sheet
+    Write-AnalyzeSheet -Path $OutputPath -SheetName $detailsName -InputData $ovHM -AutoFit -Append
+
+    # Meta
+    $newMeta = [PSCustomObject]@{
+        openvas_csv_path = $csvPath
+        generated_at     = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
+        scan_date        = $scanDate
+        details_sheet    = $detailsName
+    }
+    $metaAll = @($existingMeta) + @($newMeta)
+    Write-AnalyzeSheet -Path $OutputPath -SheetName "_meta" -InputData $metaAll -AutoFit -Append
+
+    Write-Log "  OpenVAS Workbook written: $OutputPath (summary: $($summaryOut.Count) hosts, details: $($ovHM.Count) H+M findings)" "INFO"
+    return $OutputPath
+}
+
+# --- #12: Interactive Results Viewer TUI ---
+
+function Show-ResultsViewer {
+    <#
+    .SYNOPSIS
+        Interactive TUI for navigating vulnerability scan results.
+        Supports dashboard, host list, host detail, and finding detail views.
+    #>
+    param(
+        [array]$Findings,
+        [array]$Summary,
+        [string]$SourceLabel = "OpenVAS Results"
+    )
+
+    if (-not $Findings -or $Findings.Count -eq 0) {
+        Write-Log "No findings to display." "WARN"
+        return
+    }
+
+    $view = "dashboard"   # dashboard, hosts, hostdetail, findingdetail
+    $hostList = @($Summary | Sort-Object { -[int]$_.totals_now })
+    $hostIdx = 0
+    $findingList = @()
+    $findingIdx = 0
+    $pageSize = 20
+    $hostPage = 0
+    $findingPage = 0
+    $sortMode = 0   # 0=totals, 1=high, 2=host
+    $running = $true
+    $selectedHost = $null
+
+    # Pre-compute severity totals
+    $totalHigh = @($Findings | Where-Object { "$($_.severity)" -match '(?i)^high$' }).Count
+    $totalMedium = @($Findings | Where-Object { "$($_.severity)" -match '(?i)^medium$' }).Count
+    $totalLow = @($Findings | Where-Object { "$($_.severity)" -match '(?i)^low$' }).Count
+    $totalLog = @($Findings | Where-Object { "$($_.severity)" -match '(?i)^log$' }).Count
+    $uniqueHosts = @($Summary).Count
+
+    while ($running) {
+        if (Test-IsConsoleHost) {
+            try { [Console]::CursorVisible = $false } catch {}
+            Clear-Host
+        }
+
+        switch ($view) {
+            "dashboard" {
+                Write-Host ""
+                Write-Host "  ===== VULNERABILITY RESULTS VIEWER =====" -ForegroundColor Cyan
+                Write-Host "  Source: $SourceLabel" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host "  Total Hosts:    $uniqueHosts" -ForegroundColor White
+                Write-Host "  Total Findings: $($Findings.Count)" -ForegroundColor White
+                Write-Host ""
+                Write-Host "  Severity Breakdown:" -ForegroundColor White
+                Write-Host "    HIGH:   $totalHigh" -ForegroundColor Red
+                Write-Host "    MEDIUM: $totalMedium" -ForegroundColor Yellow
+                Write-Host "    LOW:    $totalLow" -ForegroundColor Cyan
+                Write-Host "    LOG:    $totalLog" -ForegroundColor DarkGray
+                Write-Host ""
+
+                # Top 10 most vulnerable hosts
+                Write-Host "  Top 10 Most Vulnerable Hosts:" -ForegroundColor White
+                Write-Host ("  {0,-30} {1,6} {2,6} {3,6}" -f "HOST","HIGH","MED","TOTAL") -ForegroundColor DarkCyan
+                Write-Host ("  {0}" -f ("-" * 55)) -ForegroundColor DarkGray
+                $top10 = @($hostList | Select-Object -First 10)
+                foreach ($h in $top10) {
+                    $hc = [int]$h.high_count_now
+                    $mc = [int]$h.medium_count_now
+                    $tc = [int]$h.totals_now
+                    $highColor = if ($hc -gt 0) { "Red" } else { "White" }
+                    Write-Host ("  {0,-30} " -f $h.host) -NoNewline -ForegroundColor White
+                    Write-Host ("{0,6} " -f $hc) -NoNewline -ForegroundColor $highColor
+                    Write-Host ("{0,6} " -f $mc) -NoNewline -ForegroundColor Yellow
+                    Write-Host ("{0,6}" -f $tc) -ForegroundColor Cyan
+                }
+                Write-Host ""
+                Write-Host "  [H] Host List  [Q] Quit" -ForegroundColor DarkGray
+                Write-Host ""
+
+                $key = [Console]::ReadKey($true)
+                switch ($key.Key) {
+                    ([ConsoleKey]::H) { $view = "hosts"; $hostIdx = 0; $hostPage = 0 }
+                    ([ConsoleKey]::Enter) { $view = "hosts"; $hostIdx = 0; $hostPage = 0 }
+                    ([ConsoleKey]::Q) { $running = $false }
+                    ([ConsoleKey]::Escape) { $running = $false }
+                }
+            }
+
+            "hosts" {
+                # Sort host list based on sort mode
+                switch ($sortMode) {
+                    0 { $hostList = @($Summary | Sort-Object { -[int]$_.totals_now }, { -[int]$_.high_count_now }, host) }
+                    1 { $hostList = @($Summary | Sort-Object { -[int]$_.high_count_now }, { -[int]$_.totals_now }, host) }
+                    2 { $hostList = @($Summary | Sort-Object host) }
+                }
+
+                $totalPages = [Math]::Ceiling($hostList.Count / $pageSize)
+                if ($totalPages -eq 0) { $totalPages = 1 }
+                $hostPage = [Math]::Floor($hostIdx / $pageSize)
+                $startIdx = $hostPage * $pageSize
+                $endIdx = [Math]::Min($startIdx + $pageSize - 1, $hostList.Count - 1)
+                $pageItems = @($hostList[$startIdx..$endIdx])
+
+                $sortLabel = switch ($sortMode) { 0 { "Total (desc)" } 1 { "High (desc)" } 2 { "Host (asc)" } }
+
+                Write-Host ""
+                Write-Host "  ===== HOST LIST =====" -ForegroundColor Cyan
+                Write-Host "  Sort: $sortLabel  |  Page $($hostPage + 1)/$totalPages  |  $($hostList.Count) hosts" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host ("  {0,3} {1,-30} {2,6} {3,6} {4,6} {5,-15}" -f " ","HOST","HIGH","MED","TOTAL","STATUS") -ForegroundColor DarkCyan
+                Write-Host ("  {0}" -f ("-" * 72)) -ForegroundColor DarkGray
+
+                for ($i = 0; $i -lt $pageItems.Count; $i++) {
+                    $absIdx = $startIdx + $i
+                    $h = $pageItems[$i]
+                    $hc = [int]$h.high_count_now
+                    $mc = [int]$h.medium_count_now
+                    $tc = [int]$h.totals_now
+                    $pointer = if ($absIdx -eq $hostIdx) { ">" } else { " " }
+                    $fg = if ($absIdx -eq $hostIdx) { "Green" } else { "White" }
+                    $highColor = if ($hc -gt 0) { "Red" } else { $fg }
+                    $status = "$($h.asset_status)"
+
+                    Write-Host ("  {0,3} {1,-30} " -f $pointer, $h.host) -NoNewline -ForegroundColor $fg
+                    Write-Host ("{0,6} " -f $hc) -NoNewline -ForegroundColor $highColor
+                    Write-Host ("{0,6} " -f $mc) -NoNewline -ForegroundColor Yellow
+                    Write-Host ("{0,6} " -f $tc) -NoNewline -ForegroundColor Cyan
+                    Write-Host ("{0,-15}" -f $status) -ForegroundColor DarkGray
+                }
+
+                Write-Host ""
+                Write-Host "  [Up/Dn] Navigate  [Enter] Details  [S] Sort  [Esc] Back  [Q] Quit" -ForegroundColor DarkGray
+                Write-Host ""
+
+                $key = [Console]::ReadKey($true)
+                switch ($key.Key) {
+                    ([ConsoleKey]::UpArrow)   { if ($hostIdx -gt 0) { $hostIdx-- } }
+                    ([ConsoleKey]::DownArrow) { if ($hostIdx -lt $hostList.Count - 1) { $hostIdx++ } }
+                    ([ConsoleKey]::PageUp)    { $hostIdx = [Math]::Max(0, $hostIdx - $pageSize) }
+                    ([ConsoleKey]::PageDown)  { $hostIdx = [Math]::Min($hostList.Count - 1, $hostIdx + $pageSize) }
+                    ([ConsoleKey]::Home)      { $hostIdx = 0 }
+                    ([ConsoleKey]::End)       { $hostIdx = $hostList.Count - 1 }
+                    ([ConsoleKey]::S)         { $sortMode = ($sortMode + 1) % 3 }
+                    ([ConsoleKey]::Enter) {
+                        $selectedHost = $hostList[$hostIdx]
+                        # Get findings for this host
+                        $hostName = "$($selectedHost.host)".ToLower()
+                        $findingList = @($Findings | Where-Object {
+                            $fName = "$($_.asset_name)".Trim()
+                            $fHost = "$($_.hostname)".Trim()
+                            $fIP   = "$($_.ip)".Trim()
+                            $display = if ($fName) { $fName } elseif ($fHost) { $fHost } else { $fIP }
+                            $display.ToLower() -eq $hostName
+                        } | Sort-Object { -$_.cvss })
+                        $findingIdx = 0
+                        $findingPage = 0
+                        $view = "hostdetail"
+                    }
+                    ([ConsoleKey]::Escape)    { $view = "dashboard" }
+                    ([ConsoleKey]::Q)         { $running = $false }
+                }
+            }
+
+            "hostdetail" {
+                $totalPages = [Math]::Ceiling($findingList.Count / $pageSize)
+                if ($totalPages -eq 0) { $totalPages = 1 }
+                $findingPage = [Math]::Floor($findingIdx / $pageSize)
+                $startIdx = $findingPage * $pageSize
+                $endIdx = [Math]::Min($startIdx + $pageSize - 1, $findingList.Count - 1)
+                $pageItems = if ($findingList.Count -gt 0) { @($findingList[$startIdx..$endIdx]) } else { @() }
+
+                Write-Host ""
+                Write-Host "  ===== HOST: $($selectedHost.host) =====" -ForegroundColor Cyan
+                Write-Host "  IP: $($findingList[0].ip)  |  Status: $($selectedHost.asset_status)  |  Location: $($selectedHost.asset_location)" -ForegroundColor DarkGray
+                Write-Host "  Findings: $($findingList.Count)  |  Page $($findingPage + 1)/$totalPages" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host ("  {0,3} {1,-8} {2,6} {3,-8} {4,-50}" -f " ","SEVERITY","CVSS","PORT","NVT NAME") -ForegroundColor DarkCyan
+                Write-Host ("  {0}" -f ("-" * 80)) -ForegroundColor DarkGray
+
+                for ($i = 0; $i -lt $pageItems.Count; $i++) {
+                    $absIdx = $startIdx + $i
+                    $f = $pageItems[$i]
+                    $pointer = if ($absIdx -eq $findingIdx) { ">" } else { " " }
+                    $fg = if ($absIdx -eq $findingIdx) { "Green" } else { "White" }
+                    $sevColor = switch -Regex ("$($f.severity)") {
+                        '(?i)high'   { "Red" }
+                        '(?i)medium' { "Yellow" }
+                        '(?i)low'    { "Cyan" }
+                        default      { "DarkGray" }
+                    }
+                    $nvtDisplay = "$($f.nvt_name)"
+                    if ($nvtDisplay.Length -gt 50) { $nvtDisplay = $nvtDisplay.Substring(0, 47) + "..." }
+                    $portDisplay = if ($f.port) { "$($f.port)/$($f.protocol)" } else { "" }
+
+                    Write-Host ("  {0,3} " -f $pointer) -NoNewline -ForegroundColor $fg
+                    Write-Host ("{0,-8} " -f $f.severity) -NoNewline -ForegroundColor $sevColor
+                    Write-Host ("{0,6} " -f $f.cvss) -NoNewline -ForegroundColor White
+                    Write-Host ("{0,-8} " -f $portDisplay) -NoNewline -ForegroundColor DarkGray
+                    Write-Host ("{0,-50}" -f $nvtDisplay) -ForegroundColor $fg
+                }
+
+                Write-Host ""
+                Write-Host "  [Up/Dn] Navigate  [Enter] Full Detail  [Esc] Back  [Q] Quit" -ForegroundColor DarkGray
+                Write-Host ""
+
+                $key = [Console]::ReadKey($true)
+                switch ($key.Key) {
+                    ([ConsoleKey]::UpArrow)   { if ($findingIdx -gt 0) { $findingIdx-- } }
+                    ([ConsoleKey]::DownArrow) { if ($findingIdx -lt $findingList.Count - 1) { $findingIdx++ } }
+                    ([ConsoleKey]::PageUp)    { $findingIdx = [Math]::Max(0, $findingIdx - $pageSize) }
+                    ([ConsoleKey]::PageDown)  { $findingIdx = [Math]::Min($findingList.Count - 1, $findingIdx + $pageSize) }
+                    ([ConsoleKey]::Enter) {
+                        if ($findingList.Count -gt 0) { $view = "findingdetail" }
+                    }
+                    ([ConsoleKey]::Escape)    { $view = "hosts" }
+                    ([ConsoleKey]::Q)         { $running = $false }
+                }
+            }
+
+            "findingdetail" {
+                $f = $findingList[$findingIdx]
+                Write-Host ""
+                Write-Host "  ===== FINDING DETAIL =====" -ForegroundColor Cyan
+                Write-Host ""
+
+                $sevColor = switch -Regex ("$($f.severity)") {
+                    '(?i)high'   { "Red" }
+                    '(?i)medium' { "Yellow" }
+                    '(?i)low'    { "Cyan" }
+                    default      { "DarkGray" }
+                }
+
+                Write-Host "  NVT Name:   $($f.nvt_name)" -ForegroundColor White
+                Write-Host "  NVT OID:    $($f.nvt_oid)" -ForegroundColor DarkGray
+                Write-Host ("  Severity:   $($f.severity)") -ForegroundColor $sevColor
+                Write-Host "  CVSS:       $($f.cvss)" -ForegroundColor White
+                Write-Host "  QoD:        $($f.qod)" -ForegroundColor DarkGray
+                Write-Host "  CVE:        $($f.cve)" -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "  Host:       $($f.ip) ($($f.hostname))" -ForegroundColor White
+                Write-Host "  Port:       $($f.port)/$($f.protocol)" -ForegroundColor White
+                Write-Host "  Solution:   $($f.solution_type)" -ForegroundColor DarkGray
+                Write-Host ""
+
+                if ($f.asset_name) {
+                    Write-Host "  Asset:      $($f.asset_name)" -ForegroundColor DarkCyan
+                    Write-Host "  DNS:        $($f.asset_dns_name)" -ForegroundColor DarkGray
+                    Write-Host "  Status:     $($f.asset_status)" -ForegroundColor DarkGray
+                    Write-Host "  Location:   $($f.asset_location)" -ForegroundColor DarkGray
+                    Write-Host "  Source:     $($f.asset_source)" -ForegroundColor DarkGray
+                    Write-Host ""
+                }
+
+                # Word-wrap summary
+                if ($f.summary) {
+                    Write-Host "  Summary:" -ForegroundColor White
+                    $words = "$($f.summary)" -split '\s+'
+                    $line = "    "
+                    foreach ($w in $words) {
+                        if (($line.Length + $w.Length + 1) -gt 90) {
+                            Write-Host $line -ForegroundColor DarkGray
+                            $line = "    $w"
+                        } else {
+                            $line += " $w"
+                        }
+                    }
+                    if ($line.Trim()) { Write-Host $line -ForegroundColor DarkGray }
+                    Write-Host ""
+                }
+
+                if ($f.affected_software_os) {
+                    Write-Host "  Affected:   $($f.affected_software_os)" -ForegroundColor DarkGray
+                }
+
+                Write-Host ""
+                Write-Host "  [Left/Right] Prev/Next Finding  [Esc] Back  [Q] Quit" -ForegroundColor DarkGray
+                Write-Host ""
+
+                $key = [Console]::ReadKey($true)
+                switch ($key.Key) {
+                    ([ConsoleKey]::LeftArrow)  { if ($findingIdx -gt 0) { $findingIdx-- } }
+                    ([ConsoleKey]::RightArrow) { if ($findingIdx -lt $findingList.Count - 1) { $findingIdx++ } }
+                    ([ConsoleKey]::Escape)     { $view = "hostdetail" }
+                    ([ConsoleKey]::Q)          { $running = $false }
+                }
+            }
+        }
+    }
+
+    if (Test-IsConsoleHost) {
+        try { [Console]::CursorVisible = $true } catch {}
+    }
+}
+
+# --- #13: Analyze Mode Integration ---
+
+function Invoke-AnalyzeMode {
+    <#
+    .SYNOPSIS
+        Main dispatcher for Analyze mode actions.
+    #>
+    param(
+        [string]$Action,            # "BuildTracker", "BuildWorkbook", "BuildBoth", "ViewResults"
+        [string]$PhysicalCSV,
+        [string]$VirtualCSV,
+        [string]$VCenterCSV,
+        [string]$OpenVASRoot,
+        [string]$AssetTrackerPath,
+        [string]$VulnOutputPath,
+        [string]$ViewSource,        # Path to XLSX or CSV to view
+        [string]$OutDir
+    )
+
+    if (-not (Assert-ImportExcel)) { return }
+
+    $outDir = if ($OutDir) { $OutDir } else { ".\output_reports" }
+    if (-not [System.IO.Path]::IsPathRooted($outDir)) {
+        $outDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot $outDir))
+    }
+    if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+
+    switch ($Action) {
+        "BuildTracker" {
+            $output = if ($AssetTrackerPath) { $AssetTrackerPath } else { Join-Path $outDir "Asset_Tracker.xlsx" }
+            Build-AssetTracker -PhysicalCSV $PhysicalCSV -VirtualCSV $VirtualCSV `
+                               -VCenterCSV $VCenterCSV -OpenVASRoot $OpenVASRoot `
+                               -OutputPath $output
+            Write-Host ""
+            Write-Host "  Asset Tracker built: $output" -ForegroundColor Green
+        }
+        "BuildWorkbook" {
+            $trackerPath = if ($AssetTrackerPath) { $AssetTrackerPath } else { Join-Path $outDir "Asset_Tracker.xlsx" }
+            $vulnOutput = if ($VulnOutputPath) { $VulnOutputPath } else { Join-Path $outDir "OpenVAS_25.xlsx" }
+            Build-OpenVASWorkbook -AssetTrackerPath $trackerPath -OpenVASRoot $OpenVASRoot -OutputPath $vulnOutput
+            Write-Host ""
+            Write-Host "  OpenVAS Workbook built: $vulnOutput" -ForegroundColor Green
+        }
+        "BuildBoth" {
+            $trackerOutput = if ($AssetTrackerPath) { $AssetTrackerPath } else { Join-Path $outDir "Asset_Tracker.xlsx" }
+            Build-AssetTracker -PhysicalCSV $PhysicalCSV -VirtualCSV $VirtualCSV `
+                               -VCenterCSV $VCenterCSV -OpenVASRoot $OpenVASRoot `
+                               -OutputPath $trackerOutput
+            Write-Host ""
+            Write-Host "  Asset Tracker built: $trackerOutput" -ForegroundColor Green
+
+            $vulnOutput = if ($VulnOutputPath) { $VulnOutputPath } else { Join-Path $outDir "OpenVAS_25.xlsx" }
+            Build-OpenVASWorkbook -AssetTrackerPath $trackerOutput -OpenVASRoot $OpenVASRoot -OutputPath $vulnOutput
+            Write-Host ""
+            Write-Host "  OpenVAS Workbook built: $vulnOutput" -ForegroundColor Green
+        }
+        "ViewResults" {
+            $viewPath = $ViewSource
+            if (-not $viewPath -or -not (Test-Path $viewPath)) {
+                Write-Log "No valid file to view: $viewPath" "ERROR"
+                return
+            }
+
+            Write-Log "Loading results from: $viewPath"
+            $findings = @()
+            $summary = @()
+
+            if ($viewPath -match '\.xlsx$') {
+                $sheetNames = Get-ExcelSheetNames $viewPath
+                # Try loading OpenVAS workbook format
+                if ($sheetNames -contains "OpenVAS_Summary") {
+                    $summary = @(Read-ExcelSheet -Path $viewPath -SheetName "OpenVAS_Summary")
+                    # Load all detail sheets
+                    foreach ($sn in $sheetNames) {
+                        if ($sn -match '^OpenVAS_\d{6}$') {
+                            $sheetData = Read-ExcelSheet -Path $viewPath -SheetName $sn
+                            $findings += @($sheetData)
+                        }
+                    }
+                    Write-Log "  Loaded $($summary.Count) hosts, $($findings.Count) H+M findings from OpenVAS workbook"
+                } else {
+                    Write-Log "Unrecognized XLSX format (no OpenVAS_Summary sheet)" "ERROR"
+                    return
+                }
+            } elseif ($viewPath -match '\.csv$') {
+                # Try loading as OpenVAS detailed results
+                $findings = Import-OpenVASDetailed $viewPath
+                # Build summary from findings
+                $hmFindings = @($findings | Where-Object { "$($_.severity)" -match '(?i)^(high|medium)$' })
+                $grouped = @{}
+                foreach ($f in $hmFindings) {
+                    $display = if ($f.hostname) { $f.hostname } else { $f.ip }
+                    if (-not $grouped.ContainsKey($display)) { $grouped[$display] = @{ high = 0; medium = 0 } }
+                    if ("$($f.severity)" -match '(?i)high') { $grouped[$display].high++ }
+                    else { $grouped[$display].medium++ }
+                }
+                $summary = [System.Collections.ArrayList]::new()
+                foreach ($hk in $grouped.Keys) {
+                    [void]$summary.Add([PSCustomObject]@{
+                        host             = $hk
+                        high_count_now   = $grouped[$hk].high
+                        medium_count_now = $grouped[$hk].medium
+                        totals_now       = $grouped[$hk].high + $grouped[$hk].medium
+                        asset_status     = ""
+                        asset_location   = ""
+                        asset_source     = ""
+                    })
+                }
+            }
+
+            if ($findings.Count -eq 0) {
+                Write-Log "No findings loaded from $viewPath" "WARN"
+                return
+            }
+
+            Show-ResultsViewer -Findings $findings -Summary $summary -SourceLabel $viewPath
+        }
+    }
+}
+
+function Get-AnalyzeInput {
+    <#
+    .SYNOPSIS
+        Interactive TUI for gathering Analyze mode data source paths.
+        Returns a hashtable with the action and all required paths.
+    #>
+    param([string]$Action, [string]$OutDir)
+
+    $result = @{ Action = $Action }
+
+    switch ($Action) {
+        "BuildTracker" {
+            # Physical CSV
+            $physHistory = Get-InputHistory -HistoryKey "PhysicalCSVHistory"
+            $physPath = Show-FilePrompt -Title "Physical inventory CSV:" -History $physHistory `
+                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $physPath) { return $null }
+            Push-InputHistory "PhysicalCSVHistory" $physPath
+            $result.PhysicalCSV = $physPath
+
+            # Virtual CSV
+            $virtHistory = Get-InputHistory -HistoryKey "VirtualCSVHistory"
+            $virtPath = Show-FilePrompt -Title "Virtual inventory CSV:" -History $virtHistory `
+                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $virtPath) { return $null }
+            Push-InputHistory "VirtualCSVHistory" $virtPath
+            $result.VirtualCSV = $virtPath
+
+            # vCenter CSV
+            $vcHistory = Get-InputHistory -HistoryKey "VCenterCSVHistory"
+            $vcPath = Show-FilePrompt -Title "vCenter VM list CSV:" -History $vcHistory `
+                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $vcPath) { return $null }
+            Push-InputHistory "VCenterCSVHistory" $vcPath
+            $result.VCenterCSV = $vcPath
+
+            # OpenVAS root
+            $ovHistory = Get-InputHistory -HistoryKey "OpenVASRootHistory"
+            $ovPath = Show-FilePrompt -Title "OpenVAS scan root folder:" -History $ovHistory `
+                -TypePrompt "Type the folder path containing detailedresults.csv:" -MustExist
+            if (-not $ovPath) { return $null }
+            Push-InputHistory "OpenVASRootHistory" $ovPath
+            $result.OpenVASRoot = $ovPath
+        }
+        "BuildWorkbook" {
+            # Asset Tracker
+            $atHistory = Get-InputHistory -HistoryKey "AssetTrackerHistory"
+            $atPath = Show-FilePrompt -Title "Asset Tracker XLSX:" -History $atHistory `
+                -Filter "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $atPath) { return $null }
+            Push-InputHistory "AssetTrackerHistory" $atPath
+            $result.AssetTrackerPath = $atPath
+
+            # OpenVAS root
+            $ovHistory = Get-InputHistory -HistoryKey "OpenVASRootHistory"
+            $ovPath = Show-FilePrompt -Title "OpenVAS scan root folder:" -History $ovHistory `
+                -TypePrompt "Type the folder path containing detailedresults.csv:" -MustExist
+            if (-not $ovPath) { return $null }
+            Push-InputHistory "OpenVASRootHistory" $ovPath
+            $result.OpenVASRoot = $ovPath
+        }
+        "BuildBoth" {
+            # All inputs for both
+            $physHistory = Get-InputHistory -HistoryKey "PhysicalCSVHistory"
+            $physPath = Show-FilePrompt -Title "Physical inventory CSV:" -History $physHistory `
+                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $physPath) { return $null }
+            Push-InputHistory "PhysicalCSVHistory" $physPath
+            $result.PhysicalCSV = $physPath
+
+            $virtHistory = Get-InputHistory -HistoryKey "VirtualCSVHistory"
+            $virtPath = Show-FilePrompt -Title "Virtual inventory CSV:" -History $virtHistory `
+                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $virtPath) { return $null }
+            Push-InputHistory "VirtualCSVHistory" $virtPath
+            $result.VirtualCSV = $virtPath
+
+            $vcHistory = Get-InputHistory -HistoryKey "VCenterCSVHistory"
+            $vcPath = Show-FilePrompt -Title "vCenter VM list CSV:" -History $vcHistory `
+                -Filter "CSV files (*.csv)|*.csv|All files (*.*)|*.*" -TypePrompt "Type the full file path:" -MustExist
+            if (-not $vcPath) { return $null }
+            Push-InputHistory "VCenterCSVHistory" $vcPath
+            $result.VCenterCSV = $vcPath
+
+            $ovHistory = Get-InputHistory -HistoryKey "OpenVASRootHistory"
+            $ovPath = Show-FilePrompt -Title "OpenVAS scan root folder:" -History $ovHistory `
+                -TypePrompt "Type the folder path containing detailedresults.csv:" -MustExist
+            if (-not $ovPath) { return $null }
+            Push-InputHistory "OpenVASRootHistory" $ovPath
+            $result.OpenVASRoot = $ovPath
+        }
+        "ViewResults" {
+            $vwHistory = Get-InputHistory -HistoryKey "ViewResultsHistory"
+            $vwPath = Show-FilePrompt -Title "Results file to view (XLSX or CSV):" -History $vwHistory `
+                -Filter "Excel files (*.xlsx)|*.xlsx|CSV files (*.csv)|*.csv|All files (*.*)|*.*" `
+                -TypePrompt "Type the full file path:" -MustExist
+            if (-not $vwPath) { return $null }
+            Push-InputHistory "ViewResultsHistory" $vwPath
+            $result.ViewSource = $vwPath
+        }
+    }
+
+    return $result
+}
+
+# ============================================================
 #  MAIN ENTRY POINT
 # ============================================================
 
@@ -4112,6 +5960,10 @@ if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Forc
 $script:LogFile = Join-Path $logDir "ScottyScan_$($script:Timestamp).log"
 
 Write-Banner
+
+if (-not $SkipUpdateCheck) {
+    Test-GitUpdate
+}
 
 # --- Load plugins ---
 $plugDir = if ($PluginDir) { $PluginDir } else { Join-Path $PSScriptRoot "plugins" }
@@ -4132,11 +5984,43 @@ $mode = ""
 if ($Scan)     { $mode = "Scan" }
 if ($List)     { $mode = "List" }
 if ($Validate) { $mode = "Validate" }
+if ($Analyze)  { $mode = "Analyze" }
 
 # ============================================================
 #  NON-INTERACTIVE PATH (-NoMenu or mode specified via CLI)
 # ============================================================
 if ($mode -and $NoMenu) {
+
+    # --- Analyze mode: separate path (no plugins needed) ---
+    if ($mode -eq "Analyze") {
+        Write-Log "Mode: Analyze (CLI)"
+        $analyzeAction = ""
+        if ($BuildAssetTracker -and $BuildVulnWorkbook) { $analyzeAction = "BuildBoth" }
+        elseif ($BuildAssetTracker) { $analyzeAction = "BuildTracker" }
+        elseif ($BuildVulnWorkbook) { $analyzeAction = "BuildWorkbook" }
+        elseif ($UpdateAssetTracker) { $analyzeAction = "UpdateAssetTracker" }
+        elseif ($ViewResults) { $analyzeAction = "ViewResults" }
+
+        if ($analyzeAction -eq "UpdateAssetTracker") {
+            $trackerPath = if ($AssetTracker) { $AssetTracker } else { Join-Path $outDir "Asset_Tracker.xlsx" }
+            Update-AssetTracker -TrackerPath $trackerPath -VCenterCSV $VCenterCSV -OpenVASRoot $OpenVASRoot
+        } elseif ($analyzeAction) {
+            Invoke-AnalyzeMode -Action $analyzeAction `
+                -PhysicalCSV $PhysicalCSV -VirtualCSV $VirtualCSV `
+                -VCenterCSV $VCenterCSV -OpenVASRoot $OpenVASRoot `
+                -AssetTrackerPath $AssetTracker -VulnOutputPath $VulnOutput `
+                -ViewSource $ViewSource -OutDir $outDir
+        } else {
+            Write-Log "Analyze mode requires one of: -BuildAssetTracker, -BuildVulnWorkbook, -UpdateAssetTracker, -ViewResults" "ERROR"
+            exit 1
+        }
+        Save-Config
+        Write-Host ""
+        Write-Host "  ScottyScan complete." -ForegroundColor Green
+        Write-Host ""
+        exit 0
+    }
+
     # --- Plugin selection (CLI) ---
     $selectedPlugins = @()
     $softwareCheckEnabled = $false
@@ -4303,6 +6187,7 @@ while ($step -ge 1 -and $step -le 8) {
                 @{ Name = "Network Scan"; Value = "Scan";     Selected = ($lastMode -eq "Scan");     Description = "Discover hosts on CIDRs and scan for vulnerabilities" }
                 @{ Name = "List Scan";    Value = "List";     Selected = ($lastMode -eq "List");     Description = "Scan specific hosts from a file" }
                 @{ Name = "Validate";     Value = "Validate"; Selected = ($lastMode -eq "Validate"); Description = "Validate OpenVAS findings against live hosts" }
+                @{ Name = "Analyze";      Value = "Analyze";  Selected = ($lastMode -eq "Analyze");  Description = "Analyze scan results and build reports" }
             )
             if (-not $lastMode) { $modeItems[0].Selected = $true }
 
@@ -4327,7 +6212,50 @@ while ($step -ge 1 -and $step -le 8) {
         }
 
         # ---- STEP 2: Plugin Selection (with Software Version Check) ----
+        #       For Analyze mode, this step becomes the Analyze sub-menu.
         2 {
+            if ($selectedMode -eq "Analyze") {
+                # Analyze sub-menu: what action to perform
+                $analyzeItems = @(
+                    @{ Name = "Build Asset Tracker";   Value = "BuildTracker";   Selected = $true;  Description = "Combine inventory sources into unified tracker XLSX" }
+                    @{ Name = "Build Vuln Workbook";   Value = "BuildWorkbook";  Selected = $false; Description = "Generate OpenVAS vulnerability report XLSX" }
+                    @{ Name = "Build Both";            Value = "BuildBoth";      Selected = $false; Description = "Asset tracker + vulnerability workbook" }
+                    @{ Name = "View Results";          Value = "ViewResults";    Selected = $false; Description = "Interactive vulnerability browser" }
+                )
+                $analyzeResult = Show-InteractiveMenu -Title "Analyze -- What would you like to do?" -Items $analyzeItems -SingleSelect
+                if ($null -eq $analyzeResult) {
+                    if (-not $mode) { $selectedMode = "" }
+                    $step = 1
+                    continue
+                }
+                $analyzeAction = $analyzeResult | Select-Object -First 1
+
+                # Gather data source paths
+                $analyzeInput = Get-AnalyzeInput -Action $analyzeAction -OutDir $outDir
+                if (-not $analyzeInput) {
+                    continue  # re-show step 2
+                }
+
+                # Execute
+                if (-not (Assert-ImportExcel)) {
+                    continue
+                }
+
+                Save-Config
+                Invoke-AnalyzeMode -Action $analyzeInput.Action `
+                    -PhysicalCSV $analyzeInput.PhysicalCSV `
+                    -VirtualCSV $analyzeInput.VirtualCSV `
+                    -VCenterCSV $analyzeInput.VCenterCSV `
+                    -OpenVASRoot $analyzeInput.OpenVASRoot `
+                    -AssetTrackerPath $analyzeInput.AssetTrackerPath `
+                    -ViewSource $analyzeInput.ViewSource `
+                    -OutDir $outDir
+
+                # Done
+                $step = 9
+                continue
+            }
+
             if ($Plugins) {
                 # CLI plugin filter active -- skip menu
                 $pluginNames = $Plugins -split ',' | ForEach-Object { $_.Trim() }
@@ -4816,7 +6744,7 @@ while ($step -ge 1 -and $step -le 8) {
 }
 
 if (-not $mode -and -not $selectedMode) {
-    Write-Log "No mode specified. Use -Scan, -List, or -Validate (or run without -NoMenu for interactive)." "ERROR"
+    Write-Log "No mode specified. Use -Scan, -List, -Validate, or -Analyze (or run without -NoMenu for interactive)." "ERROR"
     exit 1
 }
 

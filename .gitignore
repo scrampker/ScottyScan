@@ -11,7 +11,18 @@ Thumbs.db
 # Temp/test files
 _parsecheck.ps1
 _test_*.ps1.rsls
+*.rsls
 last_run.txt
+nul
+
+# macOS resource forks
+__MACOSX/
+
+# Binary archives (extracted data is tracked instead)
+*.zip
+
+# Generated output files
+legacy/IAVT_Script/outputs/
 
 # Runtime output (may contain sensitive data)
 output_reports/

@@ -1,0 +1,6 @@
+# config.yaml
+physical: ./files/PI24.csv
+virtual: ./files/cms_cvi25_listing.csv
+vcenter: ./files/vsphere_vmlist_20251015-111715.csv
+openvas_root: ./files/10-13-2025_evidence_vonahi
+output: ./outputs/Asset_Tracker.xlsx

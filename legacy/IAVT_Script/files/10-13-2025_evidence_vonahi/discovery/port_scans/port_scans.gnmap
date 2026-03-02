@@ -1,0 +1,693 @@
+# Nmap 7.95 scan initiated Thu Oct  9 05:07:24 2025 as: nmap -Pn -T3 -n -sSU -p T:1,7,9,13,19,21,22,23,25,37,42,43,49,53,69,70,79,80,81,82,83,84,85,88,102,105,109,110,111,113,119,123,135,137,139,143,161,179,222,264,384,389,402,407,443,444,445,465,500,502,512,513,515,523,524,540,548,554,587,617,623,631,636,689,705,771,783,873,888,902,903,910,912,921,990,993,995,998,1000,1024,1030,1035,1080,1089,1090,1091,1098,1099,1100,1101,1102,1103,1128,1129,1158,1199,1211,1220,1234,1241,1270,1300,1311,1352,1433,1440,1468,1494,1521,1530,1533,1581,1582,1583,1604,1723,1755,1811,1883,1900,2049,2082,2083,2099,2100,2103,2121,2181,2199,2207,2222,2323,2362,2375,2376,2379,2380,2381,2525,2533,2598,2601,2604,2638,2809,2947,2967,3000,3037,3050,3057,3128,3200,3217,3268,3269,3273,3299,3300,3306,3311,3312,3351,3260,3389,3460,3500,3628,3632,3690,3780,3790,3817,4000,4092,4322,4343,4369,4433,4443,4444,4445,4567,4659,4679,4730,4786,4840,4848,5000,5022,5037,5038,5040,5051,5061,5093,5168,5222,5247,5250,5275,5347,5351,5353,5355,5392,5400,5405,5432,5433,5480,5498,5520,5521,5554,5555,5560,5580,5601,5631,5632,5666,5671,5672,5683,5800,5814,5900,5920,5938,5984,5985,5986,5988,5989,6000,6001,6002,6050,6060,6070,6080,6082,6101,6106,6112,6262,6379,6405,6502,6503,6504,6514,6542,6556,6660,6661,6667,6905,6988,7000,7001,7021,7071,7077,7080,7100,7144,7181,7210,7373,7443,7474,7510,7547,7579,7580,7676,7700,7770,7777,7778,7787,7800,7801,7879,7902,8000,8009,8012,8014,8020,8023,8028,8030,8040,8041,8080,8081,8086,8087,8088,8089,8090,8095,8098,8099,8127,8161,8180,8205,8222,8300,8303,8333,8400,8443,8471,8488,8500,8503,8545,8554,8686,8787,8800,8812,8834,8880,8883,8888,8899,8901,8902,8903,8983,9000,9001,9002,9042,9060,9080,9081,9084,9090,9091,9092,9099,9100,9111,9152,9160,9200,9300,9380,9390,9391,9418,9440,9443,9471,9495,9524,9527,9530,9595,9600,9809,9855,9999,10000,10001,10008,10050,10051,10080,10098,10162,10202,10203,10443,10616,10628,11000,11099,11211,11234,11333,12174,12203,12221,12345,12397,12401,13364,13500,13838,14330,15200,15671,15672,16102,16992,16993,17185,17200,17472,17775,17776,17777,17778,17781,17782,17783,17784,17790,17791,17798,18264,18881,19300,19810,19888,20000,20010,20031,20034,20101,20111,20171,20222,20293,22222,23472,23791,23943,25000,25025,25565,25672,26000,26122,27000,27017,27019,27080,27888,28017,28222,28784,30000,31001,31099,32764,32913,34205,34443,34962,34963,34964,37718,37777,37890,37891,37892,38008,38010,38080,38102,38292,40007,40317,41025,41080,41523,41524,44334,44818,45230,46823,46824,47001,47002,48899,49152,50000,50013,50070,50090,52302,52311,55553,55580,57772,61616,62078,62514,65535,U:88,161,389,500,623,5351 -iL /root/pentest/257920/targets.txt --stats-every 10s -vv -oA /root/pentest/257920/discovery/port_scans/port_scans --open
+# Ports scanned: TCP(499;1,7,9,13,19,21-23,25,37,42-43,49,53,69-70,79-85,88,102,105,109-111,113,119,123,135,137,139,143,161,179,222,264,384,389,402,407,443-445,465,500,502,512-513,515,523-524,540,548,554,587,617,623,631,636,689,705,771,783,873,888,902-903,910,912,921,990,993,995,998,1000,1024,1030,1035,1080,1089-1091,1098-1103,1128-1129,1158,1199,1211,1220,1234,1241,1270,1300,1311,1352,1433,1440,1468,1494,1521,1530,1533,1581-1583,1604,1723,1755,1811,1883,1900,2049,2082-2083,2099-2100,2103,2121,2181,2199,2207,2222,2323,2362,2375-2376,2379-2381,2525,2533,2598,2601,2604,2638,2809,2947,2967,3000,3037,3050,3057,3128,3200,3217,3260,3268-3269,3273,3299-3300,3306,3311-3312,3351,3389,3460,3500,3628,3632,3690,3780,3790,3817,4000,4092,4322,4343,4369,4433,4443-4445,4567,4659,4679,4730,4786,4840,4848,5000,5022,5037-5038,5040,5051,5061,5093,5168,5222,5247,5250,5275,5347,5351,5353,5355,5392,5400,5405,5432-5433,5480,5498,5520-5521,5554-5555,5560,5580,5601,5631-5632,5666,5671-5672,5683,5800,5814,5900,5920,5938,5984-5986,5988-5989,6000-6002,6050,6060,6070,6080,6082,6101,6106,6112,6262,6379,6405,6502-6504,6514,6542,6556,6660-6661,6667,6905,6988,7000-7001,7021,7071,7077,7080,7100,7144,7181,7210,7373,7443,7474,7510,7547,7579-7580,7676,7700,7770,7777-7778,7787,7800-7801,7879,7902,8000,8009,8012,8014,8020,8023,8028,8030,8040-8041,8080-8081,8086-8090,8095,8098-8099,8127,8161,8180,8205,8222,8300,8303,8333,8400,8443,8471,8488,8500,8503,8545,8554,8686,8787,8800,8812,8834,8880,8883,8888,8899,8901-8903,8983,9000-9002,9042,9060,9080-9081,9084,9090-9092,9099-9100,9111,9152,9160,9200,9300,9380,9390-9391,9418,9440,9443,9471,9495,9524,9527,9530,9595,9600,9809,9855,9999-10001,10008,10050-10051,10080,10098,10162,10202-10203,10443,10616,10628,11000,11099,11211,11234,11333,12174,12203,12221,12345,12397,12401,13364,13500,13838,14330,15200,15671-15672,16102,16992-16993,17185,17200,17472,17775-17778,17781-17784,17790-17791,17798,18264,18881,19300,19810,19888,20000,20010,20031,20034,20101,20111,20171,20222,20293,22222,23472,23791,23943,25000,25025,25565,25672,26000,26122,27000,27017,27019,27080,27888,28017,28222,28784,30000,31001,31099,32764,32913,34205,34443,34962-34964,37718,37777,37890-37892,38008,38010,38080,38102,38292,40007,40317,41025,41080,41523-41524,44334,44818,45230,46823-46824,47001-47002,48899,49152,50000,50013,50070,50090,52302,52311,55553,55580,57772,61616,62078,62514,65535) UDP(6;88,161,389,500,623,5351) SCTP(0;) PROTOCOLS(0;)
+Host: 192.168.100.14 ()	Status: Up
+Host: 192.168.100.14 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 2049/open/tcp//nfs///, 6000/open/tcp//X11///
+Host: 192.168.100.18 ()	Status: Up
+Host: 192.168.100.18 ()	Ports: 25/open/tcp//smtp///, 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (495)
+Host: 192.168.100.21 ()	Status: Up
+Host: 192.168.100.21 ()	Ports: 22/open/tcp//ssh///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 443/open/tcp//https///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5985/open/tcp//wsman///, 6556/open/tcp//checkmk-agent///, 47001/open/tcp//winrm///, 500/open|filtered/udp//isakmp///	Ignored State: closed (495)
+Host: 192.168.100.39 ()	Status: Up
+Host: 192.168.100.39 ()	Ports: 22/open/tcp//ssh///, 23/open/tcp//telnet///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 512/open/tcp//exec///, 513/open/tcp//login///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5432/open/tcp//postgresql///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (492)
+Host: 192.168.100.54 ()	Status: Up
+Host: 192.168.100.54 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (499)
+Host: 192.168.100.69 ()	Status: Up
+Host: 192.168.100.69 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (497)
+Host: 192.168.100.100 ()	Status: Up
+Host: 192.168.100.100 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 500/open|filtered/udp//isakmp///	Ignored State: closed (501)
+Host: 192.168.100.159 ()	Status: Up
+Host: 192.168.100.159 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///
+Host: 192.168.100.160 ()	Status: Up
+Host: 192.168.100.160 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 6556/open/tcp//checkmk-agent///, 500/open|filtered/udp//isakmp///
+Host: 192.168.100.164 ()	Status: Up
+Host: 192.168.100.164 ()	Ports: 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 2103/open/tcp//zephyr-clt///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///	Ignored State: closed (495)
+Host: 192.168.100.165 ()	Status: Up
+Host: 192.168.100.165 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///	Ignored State: closed (497)
+Host: 192.168.100.170 ()	Status: Up
+Host: 192.168.100.170 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///
+Host: 192.168.100.171 ()	Status: Up
+Host: 192.168.100.171 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///
+Host: 192.168.100.184 ()	Status: Up
+Host: 192.168.100.184 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///
+Host: 192.168.100.185 ()	Status: Up
+Host: 192.168.100.185 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 500/open|filtered/udp//isakmp///
+Host: 192.168.100.200 ()	Status: Up
+Host: 192.168.100.200 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 500/open|filtered/udp//isakmp///	Ignored State: closed (497)
+Host: 192.168.101.1 ()	Status: Up
+Host: 192.168.101.1 ()	Ports: 22/open/tcp//ssh///, 53/open/tcp//domain///, 3128/open/tcp//squid-http///, 4443/open/tcp//pharos///, 4444/open/tcp//krb524///, 8443/open/tcp//https-alt///, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (493)
+Host: 192.168.101.3 ()	Status: Up
+Host: 192.168.101.3 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.6 ()	Status: Up
+Host: 192.168.101.6 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 8300/open/tcp//tmi///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.8 ()	Status: Up
+Host: 192.168.101.8 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 2049/open/tcp//nfs///, 6000/open/tcp//X11///	Ignored State: closed (497)
+Host: 192.168.101.11 ()	Status: Up
+Host: 192.168.101.11 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (496)
+Host: 192.168.101.12 ()	Status: Up
+Host: 192.168.101.12 ()	Ports: 80/open/tcp//http///, 443/open/tcp//https///, 88/open|filtered/udp//kerberos-sec///
+Host: 192.168.101.13 ()	Status: Up
+Host: 192.168.101.13 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 2049/open/tcp//nfs///, 6000/open/tcp//X11///
+Host: 192.168.101.14 ()	Status: Up
+Host: 192.168.101.14 ()	Ports: 53/open/tcp//domain///, 88/open/tcp//kerberos-sec///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 389/open/tcp//ldap///, 445/open/tcp//microsoft-ds///, 636/open/tcp//ldapssl///, 3268/open/tcp//globalcatLDAP///, 3269/open/tcp//globalcatLDAPssl///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 11000/open/tcp//irisa///, 47001/open/tcp//winrm///, 88/open/udp//kerberos-sec///, 389/open/udp//ldap///, 500/open|filtered/udp//isakmp///	Ignored State: closed (488)
+Host: 192.168.101.15 ()	Status: Up
+Host: 192.168.101.15 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (497)
+Host: 192.168.101.17 ()	Status: Up
+Host: 192.168.101.17 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 8300/open/tcp//tmi///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.20 ()	Status: Up
+Host: 192.168.101.20 ()	Ports: 22/open/tcp//ssh///, 111/open/tcp//rpcbind///, 5432/open/tcp//postgresql///, 6556/open/tcp//checkmk-agent///	Ignored State: closed (501)
+Host: 192.168.101.24 ()	Status: Up
+Host: 192.168.101.24 ()	Ports: 80/open/tcp//http///, 443/open/tcp//https///, 623/open|filtered/udp//asf-rmcp///
+Host: 192.168.101.26 ()	Status: Up
+Host: 192.168.101.26 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 8300/open/tcp//tmi///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.29 ()	Status: Up
+Host: 192.168.101.29 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 5000/open/tcp//upnp///	Ignored State: closed (501)
+Host: 192.168.101.32 ()	Status: Up
+Host: 192.168.101.32 ()	Ports: 111/open/tcp//rpcbind///, 135/open/tcp//msrpc///, 445/open/tcp//microsoft-ds///, 2049/open/tcp//nfs///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (495)
+Host: 192.168.101.36 ()	Status: Up
+Host: 192.168.101.36 ()	Ports: 22/open/tcp//ssh///, 5432/open/tcp//postgresql///	Ignored State: closed (503)
+Host: 192.168.101.39 ()	Status: Up
+Host: 192.168.101.39 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.50 ()	Status: Up
+Host: 192.168.101.50 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 6556/open/tcp//checkmk-agent///	Ignored State: closed (501)
+Host: 192.168.101.51 ()	Status: Up
+Host: 192.168.101.51 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///	Ignored State: closed (502)
+Host: 192.168.101.53 ()	Status: Up
+Host: 192.168.101.53 ()	Ports: 22/open/tcp//ssh///, 111/open/tcp//rpcbind///	Ignored State: closed (503)
+Host: 192.168.101.63 ()	Status: Up
+Host: 192.168.101.63 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.101.65 ()	Status: Up
+Host: 192.168.101.65 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 6556/open/tcp//checkmk-agent///	Ignored State: closed (501)
+Host: 192.168.101.66 ()	Status: Up
+Host: 192.168.101.66 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 6556/open/tcp//checkmk-agent///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.69 ()	Status: Up
+Host: 192.168.101.69 ()	Ports: 80/open/tcp//http///, 81/open/tcp//hosts2-ns///, 88/open/tcp//kerberos-sec///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 389/open/tcp//ldap///, 443/open/tcp//https///, 445/open/tcp//microsoft-ds///, 636/open/tcp//ldapssl///, 1311/open/tcp//rxmon///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 7080/open/tcp//empowerid///, 9084/open/tcp//aurora///, 9443/open/tcp//tungsten-https///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 500/open|filtered/udp//isakmp///	Ignored State: closed (484)
+Host: 192.168.101.83 ()	Status: Up
+Host: 192.168.101.83 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.101.84 ()	Status: Up
+Host: 192.168.101.84 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.101.85 ()	Status: Up
+Host: 192.168.101.85 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 500/open|filtered/udp//isakmp///
+Host: 192.168.101.88 ()	Status: Up
+Host: 192.168.101.88 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.101.91 ()	Status: Up
+Host: 192.168.101.91 ()	Ports: 22/open/tcp//ssh///, 9090/open/tcp//zeus-admin///	Ignored State: filtered (503)
+Host: 192.168.101.92 ()	Status: Up
+Host: 192.168.101.92 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 6556/open/tcp//checkmk-agent///	Ignored State: closed (501)
+Host: 192.168.101.93 ()	Status: Up
+Host: 192.168.101.93 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 6556/open/tcp//checkmk-agent///, 161/open|filtered/udp//snmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: closed (498)
+Host: 192.168.101.111 ()	Status: Up
+Host: 192.168.101.111 ()	Ports: 53/open/tcp//domain///, 88/open/tcp//kerberos-sec///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 389/open/tcp//ldap///, 445/open/tcp//microsoft-ds///, 636/open/tcp//ldapssl///, 3268/open/tcp//globalcatLDAP///, 3269/open/tcp//globalcatLDAPssl///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 11000/open/tcp//irisa///, 47001/open/tcp//winrm///, 88/open/udp//kerberos-sec///, 389/open/udp//ldap///, 500/open|filtered/udp//isakmp///	Ignored State: closed (488)
+Host: 192.168.101.112 ()	Status: Up
+Host: 192.168.101.112 ()	Ports: 53/open/tcp//domain///, 88/open/tcp//kerberos-sec///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 389/open/tcp//ldap///, 445/open/tcp//microsoft-ds///, 636/open/tcp//ldapssl///, 3268/open/tcp//globalcatLDAP///, 3269/open/tcp//globalcatLDAPssl///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 11000/open/tcp//irisa///, 47001/open/tcp//winrm///, 88/open/udp//kerberos-sec///, 389/open/udp//ldap///, 500/open|filtered/udp//isakmp///	Ignored State: closed (488)
+Host: 192.168.101.114 ()	Status: Up
+Host: 192.168.101.114 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 23/open/tcp//telnet///, 80/open/tcp//http///, 443/open/tcp//https///, 161/open/udp//snmp///
+Host: 192.168.101.115 ()	Status: Up
+Host: 192.168.101.115 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 23/open/tcp//telnet///, 80/open/tcp//http///, 443/open/tcp//https///, 161/open/udp//snmp///
+Host: 192.168.101.122 ()	Status: Up
+Host: 192.168.101.122 ()	Ports: 22/open/tcp//ssh///, 23/open/tcp//telnet///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 512/open/tcp//exec///, 513/open/tcp//login///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (493)
+Host: 192.168.101.123 ()	Status: Up
+Host: 192.168.101.123 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 500/open|filtered/udp//isakmp///	Ignored State: closed (498)
+Host: 192.168.101.125 ()	Status: Up
+Host: 192.168.101.125 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 500/open|filtered/udp//isakmp///	Ignored State: closed (498)
+Host: 192.168.101.141 ()	Status: Up
+Host: 192.168.101.141 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (499)
+Host: 192.168.101.152 ()	Status: Up
+Host: 192.168.101.152 ()	Ports: 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (497)
+Host: 192.168.101.154 ()	Status: Up
+Host: 192.168.101.154 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///	Ignored State: closed (495)
+Host: 192.168.101.155 ()	Status: Up
+Host: 192.168.101.155 ()	Ports: 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (497)
+Host: 192.168.101.159 ()	Status: Up
+Host: 192.168.101.159 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (499)
+Host: 192.168.101.160 ()	Status: Up
+Host: 192.168.101.160 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (499)
+Host: 192.168.101.175 ()	Status: Up
+Host: 192.168.101.175 ()	Ports: 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1433/open/tcp//ms-sql-s///, 1583/open/tcp//simbaexpress///, 3050/open/tcp//gds_db///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (492)
+Host: 192.168.101.180 ()	Status: Up
+Host: 192.168.101.180 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (492)
+Host: 192.168.101.181 ()	Status: Up
+Host: 192.168.101.181 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.183 ()	Status: Up
+Host: 192.168.101.183 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1583/open/tcp//simbaexpress///, 3351/open/tcp//btrieve///, 3389/open/tcp//ms-wbt-server///, 5433/open/tcp//pyrrho///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.101.184 ()	Status: Up
+Host: 192.168.101.184 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.185 ()	Status: Up
+Host: 192.168.101.185 ()	Ports: 21/open/tcp//ftp///, 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.186 ()	Status: Up
+Host: 192.168.101.186 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.187 ()	Status: Up
+Host: 192.168.101.187 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 500/open|filtered/udp//isakmp///	Ignored State: closed (497)
+Host: 192.168.101.189 ()	Status: Up
+Host: 192.168.101.189 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///	Ignored State: closed (502)
+Host: 192.168.101.191 ()	Status: Up
+Host: 192.168.101.191 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3050/open/tcp//gds_db///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.192 ()	Status: Up
+Host: 192.168.101.192 ()	Ports: 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (492)
+Host: 192.168.101.193 ()	Status: Up
+Host: 192.168.101.193 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.194 ()	Status: Up
+Host: 192.168.101.194 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5040/open/tcp/////, 5432/open/tcp//postgresql///, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.101.196 ()	Status: Up
+Host: 192.168.101.196 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 1311/open/tcp//rxmon///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 5985/open/tcp//wsman///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (494)
+Host: 192.168.101.198 ()	Status: Up
+Host: 192.168.101.198 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (499)
+Host: 192.168.101.200 ()	Status: Up
+Host: 192.168.101.200 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///, 139/open/tcp//netbios-ssn///, 443/open/tcp//https///, 445/open/tcp//microsoft-ds///, 548/open/tcp//afp///, 631/open/tcp//ipp///, 873/open/tcp//rsync///, 2049/open/tcp//nfs///, 3260/open/tcp//iscsi///, 8080/open/tcp//http-proxy///, 30000/open/tcp//ndmps///, 49152/open/tcp/////	Ignored State: closed (490)
+Host: 192.168.101.205 ()	Status: Up
+Host: 192.168.101.205 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 500/open|filtered/udp//isakmp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: closed (497)
+Host: 192.168.101.206 ()	Status: Up
+Host: 192.168.101.206 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5040/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 500/open|filtered/udp//isakmp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: closed (497)
+Host: 192.168.101.208 ()	Status: Up
+Host: 192.168.101.208 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 5900/open/tcp//vnc///, 161/open/udp//snmp///, 623/open/udp//asf-rmcp///	Ignored State: closed (499)
+Host: 192.168.101.215 ()	Status: Up
+Host: 192.168.101.215 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 88/open|filtered/udp//kerberos-sec///, 161/open/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.216 ()	Status: Up
+Host: 192.168.101.216 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.221 ()	Status: Up
+Host: 192.168.101.221 ()	Ports: 80/open/tcp//http///, 88/open/tcp//kerberos-sec///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 389/open/tcp//ldap///, 443/open/tcp//https///, 445/open/tcp//microsoft-ds///, 636/open/tcp//ldapssl///, 1311/open/tcp//rxmon///, 1433/open/tcp//ms-sql-s///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 7080/open/tcp//empowerid///, 7443/open/tcp//oracleas-https///, 8088/open/tcp//radan-http///, 9084/open/tcp//aurora///, 9090/open/tcp//zeus-admin///, 10080/open/tcp//amanda///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///	Ignored State: closed (482)
+Host: 192.168.101.225 ()	Status: Up
+Host: 192.168.101.225 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 88/open|filtered/udp//kerberos-sec///, 161/open/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.101.232 ()	Status: Up
+Host: 192.168.101.232 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (499)
+Host: 192.168.101.242 ()	Status: Up
+Host: 192.168.101.242 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 6556/open/tcp//checkmk-agent///	Ignored State: closed (501)
+Host: 192.168.101.250 ()	Status: Up
+Host: 192.168.101.250 ()	Ports: 22/open/tcp//ssh///, 25/open/tcp//smtp///, 53/open/tcp//domain///, 3128/open/tcp//squid-http///, 4444/open/tcp//krb524///, 8090/open/tcp//opsmessaging///, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (493)
+Host: 192.168.101.253 ()	Status: Up
+Host: 192.168.101.253 ()	Ports: 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 623/open/tcp//oob-ws-http///, 1311/open/tcp//rxmon///, 2103/open/tcp//zephyr-clt///, 3389/open/tcp//ms-wbt-server///, 6556/open/tcp//checkmk-agent///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (493)
+Host: 192.168.101.254 ()	Status: Up
+Host: 192.168.101.254 ()	Ports: 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 623/open/tcp//oob-ws-http///, 1311/open/tcp//rxmon///, 2103/open/tcp//zephyr-clt///, 3389/open/tcp//ms-wbt-server///, 6556/open/tcp//checkmk-agent///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (493)
+Host: 192.168.101.99 ()	Status: Up
+Host: 192.168.101.99 ()	Ports: 22/open/tcp//ssh///	Ignored State: closed (504)
+Host: 192.168.199.0 ()	Status: Up
+Host: 192.168.199.0 ()	Ports: 4444/open/tcp//krb524///, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (498)
+Host: 192.168.199.1 ()	Status: Up
+Host: 192.168.199.1 ()	Ports: 22/open/tcp//ssh///, 4444/open/tcp//krb524///, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (497)
+Host: 192.168.199.2 ()	Status: Up
+Host: 192.168.199.2 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.3 ()	Status: Up
+Host: 192.168.199.3 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.4 ()	Status: Up
+Host: 192.168.199.4 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.5 ()	Status: Up
+Host: 192.168.199.5 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.199.6 ()	Status: Up
+Host: 192.168.199.6 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///, 902/open/tcp//iss-realsecure///, 5989/open/tcp//wbem-https///, 8000/open/tcp//http-alt///, 8300/open/tcp//tmi///, 88/open|filtered/udp//kerberos-sec///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///
+Host: 192.168.199.7 ()	Status: Up
+Host: 192.168.199.7 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.8 ()	Status: Up
+Host: 192.168.199.8 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 2049/open/tcp//nfs///, 6000/open/tcp//X11///	Ignored State: closed (497)
+Host: 192.168.199.9 ()	Status: Up
+Host: 192.168.199.9 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.10 ()	Status: Up
+Host: 192.168.199.10 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.11 ()	Status: Up
+Host: 192.168.199.11 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.12 ()	Status: Up
+Host: 192.168.199.12 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.13 ()	Status: Up
+Host: 192.168.199.13 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.14 ()	Status: Up
+Host: 192.168.199.14 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.15 ()	Status: Up
+Host: 192.168.199.15 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.16 ()	Status: Up
+Host: 192.168.199.16 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.17 ()	Status: Up
+Host: 192.168.199.17 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.18 ()	Status: Up
+Host: 192.168.199.18 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.19 ()	Status: Up
+Host: 192.168.199.19 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.20 ()	Status: Up
+Host: 192.168.199.20 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.21 ()	Status: Up
+Host: 192.168.199.21 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.22 ()	Status: Up
+Host: 192.168.199.22 ()	Ports: 21/open/tcp//ftp///, 22/open/tcp//ssh///, 80/open/tcp//http///, 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 990/open/tcp//ftps///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 88/open|filtered/udp//kerberos-sec///, 500/open|filtered/udp//isakmp///	Ignored State: closed (492)
+Host: 192.168.199.23 ()	Status: Up
+Host: 192.168.199.23 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.24 ()	Status: Up
+Host: 192.168.199.24 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.25 ()	Status: Up
+Host: 192.168.199.25 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.26 ()	Status: Up
+Host: 192.168.199.26 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.27 ()	Status: Up
+Host: 192.168.199.27 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.28 ()	Status: Up
+Host: 192.168.199.28 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.29 ()	Status: Up
+Host: 192.168.199.29 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.30 ()	Status: Up
+Host: 192.168.199.30 ()	Ports: 22/open/tcp//ssh///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///	Ignored State: closed (502)
+Host: 192.168.199.31 ()	Status: Up
+Host: 192.168.199.31 ()	Ports: 22/open/tcp//ssh///	Ignored State: closed (504)
+Host: 192.168.199.32 ()	Status: Up
+Host: 192.168.199.32 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.33 ()	Status: Up
+Host: 192.168.199.33 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.34 ()	Status: Up
+Host: 192.168.199.34 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.35 ()	Status: Up
+Host: 192.168.199.35 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.36 ()	Status: Up
+Host: 192.168.199.36 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.37 ()	Status: Up
+Host: 192.168.199.37 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.38 ()	Status: Up
+Host: 192.168.199.38 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.39 ()	Status: Up
+Host: 192.168.199.39 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.40 ()	Status: Up
+Host: 192.168.199.40 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (498)
+Host: 192.168.199.41 ()	Status: Up
+Host: 192.168.199.41 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.42 ()	Status: Up
+Host: 192.168.199.42 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.43 ()	Status: Up
+Host: 192.168.199.43 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.44 ()	Status: Up
+Host: 192.168.199.44 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.45 ()	Status: Up
+Host: 192.168.199.45 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.46 ()	Status: Up
+Host: 192.168.199.46 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.47 ()	Status: Up
+Host: 192.168.199.47 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.48 ()	Status: Up
+Host: 192.168.199.48 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.49 ()	Status: Up
+Host: 192.168.199.49 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.50 ()	Status: Up
+Host: 192.168.199.50 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.51 ()	Status: Up
+Host: 192.168.199.51 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.52 ()	Status: Up
+Host: 192.168.199.52 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.53 ()	Status: Up
+Host: 192.168.199.53 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.54 ()	Status: Up
+Host: 192.168.199.54 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.55 ()	Status: Up
+Host: 192.168.199.55 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.56 ()	Status: Up
+Host: 192.168.199.56 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.57 ()	Status: Up
+Host: 192.168.199.57 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.58 ()	Status: Up
+Host: 192.168.199.58 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.59 ()	Status: Up
+Host: 192.168.199.59 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.60 ()	Status: Up
+Host: 192.168.199.60 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.61 ()	Status: Up
+Host: 192.168.199.61 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.62 ()	Status: Up
+Host: 192.168.199.62 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.63 ()	Status: Up
+Host: 192.168.199.63 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.64 ()	Status: Up
+Host: 192.168.199.64 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.65 ()	Status: Up
+Host: 192.168.199.65 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.66 ()	Status: Up
+Host: 192.168.199.66 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.67 ()	Status: Up
+Host: 192.168.199.67 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.68 ()	Status: Up
+Host: 192.168.199.68 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.69 ()	Status: Up
+Host: 192.168.199.69 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.70 ()	Status: Up
+Host: 192.168.199.70 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.71 ()	Status: Up
+Host: 192.168.199.71 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.72 ()	Status: Up
+Host: 192.168.199.72 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.73 ()	Status: Up
+Host: 192.168.199.73 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.74 ()	Status: Up
+Host: 192.168.199.74 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 111/open/tcp//rpcbind///, 443/open/tcp//https///	Ignored State: closed (501)
+Host: 192.168.199.75 ()	Status: Up
+Host: 192.168.199.75 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.76 ()	Status: Up
+Host: 192.168.199.76 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.77 ()	Status: Up
+Host: 192.168.199.77 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.78 ()	Status: Up
+Host: 192.168.199.78 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///, 443/open/tcp//https///	Ignored State: closed (502)
+Host: 192.168.199.79 ()	Status: Up
+Host: 192.168.199.79 ()	Ports: 22/open/tcp//ssh///, 5432/open/tcp//postgresql///	Ignored State: closed (503)
+Host: 192.168.199.80 ()	Status: Up
+Host: 192.168.199.80 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.81 ()	Status: Up
+Host: 192.168.199.81 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.82 ()	Status: Up
+Host: 192.168.199.82 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.83 ()	Status: Up
+Host: 192.168.199.83 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.84 ()	Status: Up
+Host: 192.168.199.84 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.85 ()	Status: Up
+Host: 192.168.199.85 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.86 ()	Status: Up
+Host: 192.168.199.86 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.87 ()	Status: Up
+Host: 192.168.199.87 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.88 ()	Status: Up
+Host: 192.168.199.88 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.89 ()	Status: Up
+Host: 192.168.199.89 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5432/open/tcp//postgresql///, 5433/open/tcp//pyrrho///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.199.90 ()	Status: Up
+Host: 192.168.199.90 ()	Ports: 135/open/tcp//msrpc///, 139/open/tcp//netbios-ssn///, 445/open/tcp//microsoft-ds///, 3389/open/tcp//ms-wbt-server///, 5000/open/tcp//upnp///, 5432/open/tcp//postgresql///, 47001/open/tcp//winrm///, 49152/open/tcp/////, 500/open|filtered/udp//isakmp///	Ignored State: closed (496)
+Host: 192.168.199.91 ()	Status: Up
+Host: 192.168.199.91 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.92 ()	Status: Up
+Host: 192.168.199.92 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.93 ()	Status: Up
+Host: 192.168.199.93 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.94 ()	Status: Up
+Host: 192.168.199.94 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.95 ()	Status: Up
+Host: 192.168.199.95 ()	Ports: 22/open/tcp//ssh///, 5432/open/tcp//postgresql///	Ignored State: closed (503)
+Host: 192.168.199.96 ()	Status: Up
+Host: 192.168.199.96 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.97 ()	Status: Up
+Host: 192.168.199.97 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.98 ()	Status: Up
+Host: 192.168.199.98 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.99 ()	Status: Up
+Host: 192.168.199.99 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.100 ()	Status: Up
+Host: 192.168.199.100 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.101 ()	Status: Up
+Host: 192.168.199.101 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.102 ()	Status: Up
+Host: 192.168.199.102 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.103 ()	Status: Up
+Host: 192.168.199.103 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.104 ()	Status: Up
+Host: 192.168.199.104 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.105 ()	Status: Up
+Host: 192.168.199.105 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.106 ()	Status: Up
+Host: 192.168.199.106 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.107 ()	Status: Up
+Host: 192.168.199.107 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.108 ()	Status: Up
+Host: 192.168.199.108 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.109 ()	Status: Up
+Host: 192.168.199.109 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.110 ()	Status: Up
+Host: 192.168.199.110 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.111 ()	Status: Up
+Host: 192.168.199.111 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.112 ()	Status: Up
+Host: 192.168.199.112 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.113 ()	Status: Up
+Host: 192.168.199.113 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.114 ()	Status: Up
+Host: 192.168.199.114 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.115 ()	Status: Up
+Host: 192.168.199.115 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.116 ()	Status: Up
+Host: 192.168.199.116 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.117 ()	Status: Up
+Host: 192.168.199.117 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.118 ()	Status: Up
+Host: 192.168.199.118 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.119 ()	Status: Up
+Host: 192.168.199.119 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.120 ()	Status: Up
+Host: 192.168.199.120 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.121 ()	Status: Up
+Host: 192.168.199.121 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.122 ()	Status: Up
+Host: 192.168.199.122 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.123 ()	Status: Up
+Host: 192.168.199.123 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.124 ()	Status: Up
+Host: 192.168.199.124 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.125 ()	Status: Up
+Host: 192.168.199.125 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.126 ()	Status: Up
+Host: 192.168.199.126 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.127 ()	Status: Up
+Host: 192.168.199.127 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.128 ()	Status: Up
+Host: 192.168.199.128 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.129 ()	Status: Up
+Host: 192.168.199.129 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.130 ()	Status: Up
+Host: 192.168.199.130 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.131 ()	Status: Up
+Host: 192.168.199.131 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.132 ()	Status: Up
+Host: 192.168.199.132 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.133 ()	Status: Up
+Host: 192.168.199.133 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.134 ()	Status: Up
+Host: 192.168.199.134 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.135 ()	Status: Up
+Host: 192.168.199.135 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.136 ()	Status: Up
+Host: 192.168.199.136 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.137 ()	Status: Up
+Host: 192.168.199.137 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.138 ()	Status: Up
+Host: 192.168.199.138 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.139 ()	Status: Up
+Host: 192.168.199.139 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.140 ()	Status: Up
+Host: 192.168.199.140 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.141 ()	Status: Up
+Host: 192.168.199.141 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.142 ()	Status: Up
+Host: 192.168.199.142 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.143 ()	Status: Up
+Host: 192.168.199.143 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.144 ()	Status: Up
+Host: 192.168.199.144 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.145 ()	Status: Up
+Host: 192.168.199.145 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.146 ()	Status: Up
+Host: 192.168.199.146 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.147 ()	Status: Up
+Host: 192.168.199.147 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.148 ()	Status: Up
+Host: 192.168.199.148 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.149 ()	Status: Up
+Host: 192.168.199.149 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.150 ()	Status: Up
+Host: 192.168.199.150 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.151 ()	Status: Up
+Host: 192.168.199.151 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.152 ()	Status: Up
+Host: 192.168.199.152 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.153 ()	Status: Up
+Host: 192.168.199.153 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.154 ()	Status: Up
+Host: 192.168.199.154 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.155 ()	Status: Up
+Host: 192.168.199.155 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.156 ()	Status: Up
+Host: 192.168.199.156 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.157 ()	Status: Up
+Host: 192.168.199.157 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.158 ()	Status: Up
+Host: 192.168.199.158 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.159 ()	Status: Up
+Host: 192.168.199.159 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.160 ()	Status: Up
+Host: 192.168.199.160 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.161 ()	Status: Up
+Host: 192.168.199.161 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.162 ()	Status: Up
+Host: 192.168.199.162 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.163 ()	Status: Up
+Host: 192.168.199.163 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.164 ()	Status: Up
+Host: 192.168.199.164 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.165 ()	Status: Up
+Host: 192.168.199.165 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.166 ()	Status: Up
+Host: 192.168.199.166 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.167 ()	Status: Up
+Host: 192.168.199.167 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.168 ()	Status: Up
+Host: 192.168.199.168 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.169 ()	Status: Up
+Host: 192.168.199.169 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.170 ()	Status: Up
+Host: 192.168.199.170 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.171 ()	Status: Up
+Host: 192.168.199.171 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.172 ()	Status: Up
+Host: 192.168.199.172 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.173 ()	Status: Up
+Host: 192.168.199.173 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.174 ()	Status: Up
+Host: 192.168.199.174 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.175 ()	Status: Up
+Host: 192.168.199.175 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.176 ()	Status: Up
+Host: 192.168.199.176 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.177 ()	Status: Up
+Host: 192.168.199.177 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.178 ()	Status: Up
+Host: 192.168.199.178 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.179 ()	Status: Up
+Host: 192.168.199.179 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.180 ()	Status: Up
+Host: 192.168.199.180 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.181 ()	Status: Up
+Host: 192.168.199.181 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.182 ()	Status: Up
+Host: 192.168.199.182 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.183 ()	Status: Up
+Host: 192.168.199.183 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.184 ()	Status: Up
+Host: 192.168.199.184 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.185 ()	Status: Up
+Host: 192.168.199.185 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.186 ()	Status: Up
+Host: 192.168.199.186 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.187 ()	Status: Up
+Host: 192.168.199.187 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.188 ()	Status: Up
+Host: 192.168.199.188 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.189 ()	Status: Up
+Host: 192.168.199.189 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.190 ()	Status: Up
+Host: 192.168.199.190 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.191 ()	Status: Up
+Host: 192.168.199.191 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.192 ()	Status: Up
+Host: 192.168.199.192 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.193 ()	Status: Up
+Host: 192.168.199.193 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.194 ()	Status: Up
+Host: 192.168.199.194 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.195 ()	Status: Up
+Host: 192.168.199.195 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.196 ()	Status: Up
+Host: 192.168.199.196 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.197 ()	Status: Up
+Host: 192.168.199.197 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.198 ()	Status: Up
+Host: 192.168.199.198 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.199 ()	Status: Up
+Host: 192.168.199.199 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.200 ()	Status: Up
+Host: 192.168.199.200 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.201 ()	Status: Up
+Host: 192.168.199.201 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.202 ()	Status: Up
+Host: 192.168.199.202 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.203 ()	Status: Up
+Host: 192.168.199.203 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.204 ()	Status: Up
+Host: 192.168.199.204 ()	Ports: 22/open/tcp//ssh///	Ignored State: closed (504)
+Host: 192.168.199.205 ()	Status: Up
+Host: 192.168.199.205 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.206 ()	Status: Up
+Host: 192.168.199.206 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.207 ()	Status: Up
+Host: 192.168.199.207 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.208 ()	Status: Up
+Host: 192.168.199.208 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.209 ()	Status: Up
+Host: 192.168.199.209 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.210 ()	Status: Up
+Host: 192.168.199.210 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.211 ()	Status: Up
+Host: 192.168.199.211 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.212 ()	Status: Up
+Host: 192.168.199.212 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.213 ()	Status: Up
+Host: 192.168.199.213 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.214 ()	Status: Up
+Host: 192.168.199.214 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.215 ()	Status: Up
+Host: 192.168.199.215 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.216 ()	Status: Up
+Host: 192.168.199.216 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.217 ()	Status: Up
+Host: 192.168.199.217 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.218 ()	Status: Up
+Host: 192.168.199.218 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.219 ()	Status: Up
+Host: 192.168.199.219 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.220 ()	Status: Up
+Host: 192.168.199.220 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.221 ()	Status: Up
+Host: 192.168.199.221 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.222 ()	Status: Up
+Host: 192.168.199.222 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.223 ()	Status: Up
+Host: 192.168.199.223 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.224 ()	Status: Up
+Host: 192.168.199.224 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.225 ()	Status: Up
+Host: 192.168.199.225 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.226 ()	Status: Up
+Host: 192.168.199.226 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.227 ()	Status: Up
+Host: 192.168.199.227 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.228 ()	Status: Up
+Host: 192.168.199.228 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.229 ()	Status: Up
+Host: 192.168.199.229 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.230 ()	Status: Up
+Host: 192.168.199.230 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.231 ()	Status: Up
+Host: 192.168.199.231 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.232 ()	Status: Up
+Host: 192.168.199.232 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.233 ()	Status: Up
+Host: 192.168.199.233 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.234 ()	Status: Up
+Host: 192.168.199.234 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.235 ()	Status: Up
+Host: 192.168.199.235 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.236 ()	Status: Up
+Host: 192.168.199.236 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.237 ()	Status: Up
+Host: 192.168.199.237 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.238 ()	Status: Up
+Host: 192.168.199.238 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.239 ()	Status: Up
+Host: 192.168.199.239 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.240 ()	Status: Up
+Host: 192.168.199.240 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.241 ()	Status: Up
+Host: 192.168.199.241 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.242 ()	Status: Up
+Host: 192.168.199.242 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.243 ()	Status: Up
+Host: 192.168.199.243 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.244 ()	Status: Up
+Host: 192.168.199.244 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.245 ()	Status: Up
+Host: 192.168.199.245 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.246 ()	Status: Up
+Host: 192.168.199.246 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.247 ()	Status: Up
+Host: 192.168.199.247 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.248 ()	Status: Up
+Host: 192.168.199.248 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.249 ()	Status: Up
+Host: 192.168.199.249 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.250 ()	Status: Up
+Host: 192.168.199.250 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.251 ()	Status: Up
+Host: 192.168.199.251 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.252 ()	Status: Up
+Host: 192.168.199.252 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.253 ()	Status: Up
+Host: 192.168.199.253 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.254 ()	Status: Up
+Host: 192.168.199.254 ()	Ports: 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (499)
+Host: 192.168.199.255 ()	Status: Up
+Host: 192.168.199.255 ()	Ports: 4444/open/tcp//krb524///, 88/open|filtered/udp//kerberos-sec///, 161/open|filtered/udp//snmp///, 389/open|filtered/udp//ldap///, 500/open|filtered/udp//isakmp///, 623/open|filtered/udp//asf-rmcp///, 5351/open|filtered/udp//nat-pmp///	Ignored State: filtered (498)
+# Nmap done at Thu Oct  9 05:10:58 2025 -- 768 IP addresses (348 hosts up) scanned in 213.80 seconds

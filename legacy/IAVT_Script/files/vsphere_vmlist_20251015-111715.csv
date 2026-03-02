@@ -1,0 +1,135 @@
+﻿"Name","PowerState","VMHost","vCPU","MemoryGB","Hostname","IPAddresses","Notes"
+"iwnv-w-wks-lvillegas","PoweredOn","192.168.101.26","4","16","iwnv-w-wks-lvillegas.infowerks.com","192.168.101.159,fe80::cd99:5436:7f54:c6d5",
+"iwnv-w-wks-zbrady","PoweredOn","192.168.101.6","4","16","iwnv-w-wks-zach.infowerks.com","192.168.101.155,fe80::ac2:be62:f82d:ec64",
+"iwnv-w-wks-w11-template","PoweredOn","192.168.101.26","4","16","DESKTOP-PTMOOD2","192.168.101.152,fe80::cef1:35d5:ea12:6ae0",
+"iwnv-l-app-internal-services","PoweredOn","192.168.101.6","2","4","ilas1as23","192.168.101.29,fe80::250:56ff:fe94:6add",""
+"iwnv-w-wks-andy-3","PoweredOff","192.168.101.17","4","8","ilas3devirun3.infowerks.com","","Dealloc approved by andy 05-31-25"
+"ilas3devirun2.101.79","PoweredOff","192.168.101.17","4","8","ilas3devirun2.infowerks.com","",
+"iwnv-w-wks-stephen-3","PoweredOff","192.168.101.17","4","8","ILAS3DEVIRUN1.infowerks.com","","dealloc approved by shl 05-31-25"
+"iwnv-w-sql-3db06","PoweredOn","192.168.101.17","8","16","ILAS3DB06.infowerks.com","192.168.101.187",""
+"iwnv-w-wks-sscott","PoweredOn","192.168.101.6","4","8","ILAS3WKS95.infowerks.com","192.168.100.185",
+"ilas3wks92.100.181","PoweredOff","192.168.101.39","4","8","ILAS3WKS92.infowerks.com","",""
+"ilas3wks35.101.241","PoweredOff","192.168.101.39","4","8","ILAS3WKS35.infowerks.com","",""
+"ilas3wks36.101.240","PoweredOff","192.168.101.39","4","8","ILAS3WKS36.infowerks.com","",""
+"iwnv-w-dc-1","PoweredOn","192.168.101.17","6","12","ilas1dc01.infowerks.com","192.168.101.111",
+"ilas1ubu04.101.40","PoweredOff","192.168.101.17","8","12","ilas1ubu04","",
+"ilas3wks90.100.175","PoweredOff","192.168.101.6","4","8","ILAS3WKS90.infowerks.com","",
+"iwnv-w-wks-jon","PoweredOn","192.168.101.6","4","8","ILAS3WKS87.infowerks.com","192.168.100.170",""
+"iwnv-l-prod-pg10","PoweredOn","192.168.101.6","4","8","ilas3pg10","192.168.101.93,fe80::250:56ff:fe94:75f7,192.168.101.92,fe80::250:56ff:fe94:5368","Used for image viewmaster loads with legacy code"
+"iwnv-w-wks-andy-1","PoweredOn","192.168.101.26","4","8","ILAS3WKS81.infowerks.com","192.168.100.159","Andy Primary workstation"
+"iwnv-w-wks-beth","PoweredOn","192.168.101.6","8","16","ILAS3WKS85.infowerks.com","192.168.101.85",
+"iwnv-w-images-83","PoweredOn","192.168.101.6","4","8","ilas3wks83.infowerks.com","192.168.101.83",
+"iwnv-w-wks-rachel","PoweredOn","192.168.101.6","4","8","ILAS3WKS82.infowerks.com","192.168.100.160","Rachel primary workstation"
+"ilas3irun30.101.30","PoweredOff","192.168.101.6","4","8","ilas3irun3.infowerks.com","",
+"ilas1win1005.100.167","PoweredOff","192.168.101.6","4","6","ilas1win1005.infowerks.com","",
+"ilas1wkstest04.101.71","PoweredOff","192.168.101.17","4","8","ilas1wkstest04.infowerks.com","","encora dev obscura machine, deallocate"
+"ilas1web09.101.96","PoweredOff","192.168.101.26","2","4","ilas1web09","",
+"iwnv-w-sql-sql02a","PoweredOn","192.168.101.6","6","16","ilas0sql02a.infowerks.com","192.168.101.66",
+"iwnv-l-pgsql-scriptera","PoweredOff","192.168.101.6","8","16","ilas1ubu01","","barry exported all needed schema data off 10-08-2025"
+"ilas1wkstest01.101.67","PoweredOff","192.168.101.17","4","8","ilas1wkstest01.infowerks.com","","Image test machine, not logged into in a very long time"
+"iwnv-w-wks-images6","PoweredOn","192.168.101.17","4","16","ilas1win1003.infowerks.com","192.168.100.165","barry image machine"
+"ilas3wks75.101.127","PoweredOff","192.168.101.26","4","8","ilas3wks75.infowerks.com","",
+"iwnv-l-pgsql-images","PoweredOn","192.168.101.6","8","16","ilas1linux04","192.168.101.50,fe80::250:56ff:fe94:2397",""
+"iwnv-w-wks-adam","PoweredOn","192.168.101.6","4","8","ilas3wks73.infowerks.com","192.168.101.125",
+"ilas3wks72.101.124","PoweredOff","192.168.101.26","4","8","ilas3wks72.infowerks.com","",
+"iwnv-w-wks-jholder","PoweredOn","192.168.101.17","4","16","iwnv-w-wks-judd3.infowerks.com","192.168.100.69",
+"iwnv-l-pg-images","PoweredOff","192.168.101.26","1","4","ilas1pg03","","10-01-2025 Judd confirmed good to delete in slack dm"
+"ilas1wagsftp01.WalgreensFTPServer","PoweredOn","192.168.199.5","4","12","ILAS1WAGSFTP01","192.168.199.22",
+"ilas3wks49.100.136","PoweredOff","192.168.101.26","4","8","ilas3wks49.infowerks.com","",
+"iwnv-w-images-84","PoweredOn","192.168.101.6","4","8","ilas3wks84.infowerks.com","192.168.101.84",
+"ilas3db04.100.99","PoweredOff","192.168.101.26","4","6","ilas3db04.infowerks.com","","Appears to be another ancient SQL Server with 5 DB's from a long time ago. Contains a copy of the ifw_sf_archive and iwerks_conversion_db"
+"iwnv-w-wks-viki1","PoweredOff","192.168.101.26","2","3","ILAS3WKS32.infowerks.com","","dalloc approved by vm 08-27-25"
+"iwnv-w-wks-images5","PoweredOn","192.168.101.26","4","16","ilas1win1002.infowerks.com","192.168.100.164","barry image machine"
+"ilas3wks79.100.158","PoweredOff","192.168.101.26","2","3","ILAS3WKS79.infowerks.com","",
+"iwnv-w-wks-images4","PoweredOn","192.168.101.6","4","8","ILAS2IMG15.infowerks.com","192.168.101.232",
+"iwnv-w-srv-firebird","PoweredOn","192.168.101.26","4","8","iSQL1.infowerks.com","192.168.101.175",""
+"ilas3wks70.101.121","PoweredOff","192.168.101.6","4","8","ilas3wks70.infowerks.com","",
+"iwnv-l-it-vpentest-agent","PoweredOn","192.168.101.17","2","8","ilas0nscan","192.168.101.99,fe80::250:56ff:fe94:13dd",""
+"ilas1wkstest03.101.70","PoweredOff","192.168.101.17","4","8","ilas1wkstest03.infowerks.com","","Test machine"
+"iwnv-l-pgsql-65","PoweredOff","192.168.101.6","4","8","ilas3linux01","",""
+"iwnv-w-dc-2","PoweredOn","192.168.101.17","6","12","icage0dc02.infowerks.com","192.168.101.112",
+"ilas3irun21.100.191","PoweredOff","192.168.101.17","2","10","ILAS3IRUN21.infowerks.com","",
+"iwnv-l-pgsql-242","PoweredOff","192.168.101.39","4","12","ilas4db02","",""
+"iwnv-l-vm-walmart2","PoweredOff","192.168.101.26","2","4","ilaswlmtvm02","","Confirmed with Jeff H Contract complete for wmart offboarding"
+"iwnv-l-vm-walmart3","PoweredOff","192.168.101.26","2","4","ilas33walvm3","","Confirmed with Jeff H Contract complete for wmart offboarding"
+"ilas3wks91.100.180","PoweredOff","192.168.101.39","4","8","ILAS3WKS91.infowerks.com","",""
+"ilas2as02.iHBS3","PoweredOff","192.168.101.216","2","8","ilas2as02.infowerks.com","","No HBS conversions in 4+ years."
+"iwnv-w-wks-stephen-1","PoweredOn","192.168.101.17","4","8","ILAS3WKS88.infowerks.com","192.168.100.171",
+"iwnv-w-wks-andy-2","PoweredOff","192.168.101.6","2","3","ILAS1DEV12.infowerks.com","","Andy machine has Etreby ADS Tooling, do not deallocate"
+"iwnv-l-vm-walmart1","PoweredOff","192.168.101.26","2","4","ilas3vmapp40","","Confirmed with Jeff H Contract complete for wmart offboarding"
+"iwnv-l-srv-rx30-rssh","PoweredOn","192.168.101.6","4","8","ilas1fed01.localdomain","192.168.101.91,fe80::250:56ff:fe94:512e,192.168.20.10,fe80::2bab:295b:c952:63e7",""
+"iwnv-w-irun-145","PoweredOff","192.168.101.26","4","8","ILAS3WKS56.infowerks.com","","Dealloc approved by jon 05-31-25"
+"iwnv-w-wks-stephen-4","PoweredOff","192.168.101.6","2","4","ilas1dev10.infowerks.com","","shl old DJ machine, approved for dealloc 10-6-25"
+"iwnv-w-wks-dan-2","PoweredOn","192.168.101.26","4","16","ilas1win1004.infowerks.com","192.168.101.194",""
+"iwnv-w-wks-bethjon","PoweredOff","192.168.101.17","4","8","ILAS2IMG22.infowerks.com","","old image machine good to reclaim"
+"iwnv-w-prod-bcc-mailmanager-2","PoweredOn","192.168.101.17","4","8","ILAS4BCC2.infowerks.com","192.168.101.206,fe80::2361:c9a8:4c67:59bb",
+"iwnv-w-wks-stephen-2","PoweredOff","192.168.101.39","4","6","ILAS3WKS40.infowerks.com","","Approved by stephen for dealloc 05/31/2025
+"
+"ilas3irun14.100.91","PoweredOff","192.168.101.17","2","8","ILAS3IRUN14.infowerks.com","",
+"ilas3db01 100.75","PoweredOff","192.168.101.17","4","8","ILAS3DB01.infowerks.com","","Last login from basil 2019, no databases no activity 10-08-2025
+"
+"ilas3wks97.100.186","PoweredOff","192.168.101.26","4","8","ILAS3WKS97.infowerks.com","",
+"ilas3wks26 100.73","PoweredOff","192.168.101.216","2","3","ILAS3WKS26.infowerks.com","",
+"ilas4sql01.100.28","PoweredOff","192.168.101.26","4","6","ilas4sql01.infowerks.com","",
+"ilas1vend01.100.150","PoweredOff","192.168.101.26","4","6","ilas1vend01.infowerks.com","","dealloc approved by zach 09-04-25"
+"iwnv-l-pgsql-20","PoweredOff","192.168.101.39","8","8","ilas4db01","",""
+"iwnv-l-vmdb-wmart-freds","PoweredOff","192.168.101.26","4","8","ilas1pg15","","Confirmed with Jeff H Contract complete for wmart offboarding and freds moved to azure"
+"iwnv-w-wks-vminnick","PoweredOn","192.168.101.17","4","16","iwnv-w-wks-vminnick.infowerks.com","192.168.101.160,fe80::2179:2d0e:f15b:b082",
+"iwnv-w-wks-images1","PoweredOff","192.168.101.6","4","8","ILAS2IMG20.infowerks.com","","good to dealloc judd 10-06-2025"
+"ilas1web06.dashboard.infowerks.com","PoweredOff","192.168.101.225","1","2","ilas1web06","",
+"ilas1wagsdb03.199.79","PoweredOn","192.168.199.5","4","6","ilas1wagsdb03","192.168.199.79,fe80::250:56ff:fe94:628d",
+"ilas3irun08.100.38","PoweredOff","192.168.101.216","2","8","ILAS3IRUN08.infowerks.com","",
+"iwnv-w-wks-images3","PoweredOn","192.168.101.6","4","8","ILAS2IMG16.infowerks.com","192.168.101.198",""
+"ilas3irun09.100.58","PoweredOff","192.168.101.6","2","8","ilas3irun09.infowerks.com","",
+"iwnv-w-sql-3db05","PoweredOn","192.168.101.26","6","16","ilas3db05.infowerks.com","192.168.100.200",
+"iwnv-l-wks-nick","PoweredOn","192.168.101.216","1","2","ilas1as29","192.168.101.53,fe80::250:56ff:fe94:33a6",""
+"ilas1img01.imagestoreWG","PoweredOn","192.168.101.26","2","4","ilas1img01.infowerks.com","192.168.101.63",
+"iwnv-w-wks-ken-1","PoweredOn","192.168.101.26","8","32","ILAS3WKS95a.infowerks.com","192.168.100.184",
+"iwnv-l-pgsql-dev","PoweredOn","192.168.101.26","2","6","ilas1ubu02","192.168.101.36,fe80::250:56ff:fe94:4f0",""
+"ilas3irun12.100.89","PoweredOff","192.168.101.6","2","8","ILAS3IRUN12.infowerks.com","",
+"iwnv-w-wks-lisap","PoweredOn","192.168.101.216","2","4","ILAS2WKS27.infowerks.com","192.168.100.54",
+"iwnv-w-wks-mike","PoweredOn","192.168.101.26","1","2","ILAS1WKS09.infowerks.com","192.168.101.141",
+"iwnv-w-wks-dan-1","PoweredOn","192.168.101.17","2","8","ILAS3IRUN04.infowerks.com","192.168.101.183",""
+"ilas3irun02.100.41","PoweredOff","192.168.101.216","2","8","ILAS3IRUN02.infowerks.com","",
+"iwnv-w-wks-danielle","PoweredOn","192.168.101.6","4","8","ilas3wks71.infowerks.com","192.168.101.123",
+"iwnv-w-wks-barry-3","PoweredOff","192.168.101.216","1","2","ILAS1WKS08.infowerks.com","","10-01-2025 Barry to inform me once he has cleaned off and mark for deletion"
+"iwnv-w-wks-images2","PoweredOff","192.168.101.26","4","8","ILAS2IMG19.infowerks.com","","good to dealloc judd 10-06-2025"
+"ilas1wagswks01.100.100","PoweredOn","192.168.101.216","2","4","ILAS1WAGSWKS01.infowerks.com","",
+"iwnv-w-prod-bcc-mailmanager-1","PoweredOn","192.168.101.17","4","8","ILAS4BCC1.infowerks.com","192.168.101.205,fe80::7bdd:2f59:ea57:4b8a",
+"iwnv-w-automation","PoweredOn","192.168.101.26","4","6","ilas3wks46.infowerks.com","192.168.101.154",
+"iwnv-w-irun-144","PoweredOff","192.168.101.26","4","8","ILAS3WKS55.infowerks.com","","Dealloc approved by jon 05-31-25"
+"iwnv-w-wks-kelly","PoweredOn","192.168.101.26","2","2","ILAS1QA03.infowerks.com","192.168.100.39",
+"ilas1sql11.101.28","PoweredOff","192.168.101.6","2","4","ilas1sql11.infowerks.com","",
+"iwnv-w-dc-3","PoweredOn","192.168.101.17","6","12","ilas1dc03.infowerks.com","169.254.1.10,192.168.101.14",""
+"iwnv-l-pgsql-189","PoweredOn","192.168.101.26","4","16","ilaslinux03","192.168.101.189,fe80::250:56ff:fe94:4f2b",""
+"iwnv-w-wks-ngawade","PoweredOff","192.168.101.26","4","8","ILAS1SYN01.infowerks.com","","niketans old vm/workstation"
+"ilas1wagsdb02.db2.199.30","PoweredOn","192.168.199.5","4","12","ilas1wagsdb02","",
+"ilas1wagftp02.linux","PoweredOn","192.168.199.5","1","4",,"","ubuntu 16.04"
+"ilas1as28.101.38","PoweredOff","192.168.101.17","2","2","ilas1as28","",
+"ilas1wagsvm3.vm35199.31","PoweredOn","192.168.199.5","2","2",,"",
+"ilas3irun01.100.40","PoweredOff","192.168.101.216","2","8","ILAS3IRUN01.infowerks.com","",
+"ilas2img07.100.63","PoweredOff","192.168.101.216","1","4","ILAS2IMG07.infowerks.com","","Contains one project from 2018 images"
+"iwnv-w-wks-basil","PoweredOff","192.168.101.6","2","8","ilas2wks20.infowerks.com","",
+"ilas3smtp01.101.12","PoweredOn","192.168.101.216","1","4","ilas3smtp01.infowerks.com","192.168.100.18",
+"ilas3irun05.100.44","PoweredOff","192.168.101.216","2","8","ILAS3IRUN05.infowerks.com","",
+"ilas1pg01.101.56","PoweredOff","192.168.101.216","1","4","ilas1pg01","",
+"iwnv-l-srv-cartographer-1","PoweredOn","192.168.101.216","2","8","ilas1as24","192.168.101.51,fe80::250:56ff:fe94:2709",""
+"ilas3wks93.100.182","PoweredOff","192.168.101.39","4","8","ILAS3WKS93.infowerks.com","",""
+"ilas3wks94.100.183","PoweredOff","192.168.101.39","4","8","ILAS3WKS94.infowerks.com","",""
+"ilas1sql10","PoweredOff","192.168.101.26","2","5","ilas1sql10.infowerks.com","","postgres 9.5 machine with some dev vm databases on it."
+"ilas1wagsfe01.199.74","PoweredOn","192.168.199.6","4","4","ilas1wagsfe01","192.168.199.74,fe80::250:56ff:fe94:29f2",
+"ilas1wagsimg01","PoweredOn","192.168.199.6","2","4","ILAS1WAGSIMG01.infowerks.com","192.168.199.40",
+"ilas1wagsas03.199.89","PoweredOn","192.168.199.6","4","4","ilas1wagsas03","192.168.199.89",
+"ilas1wagsfe02.199.78","PoweredOn","192.168.199.6","4","4","ilas1wagsfe02","192.168.199.78,fe80::250:56ff:fe94:6467",
+"iwnv-w-sftp3","PoweredOn","192.168.101.26","12","12","ilas2ftp01.infowerks.com","192.168.100.21",
+"ilas1sql05.SQL2012_2","PoweredOff","192.168.101.6","4","6","ilas1sql05.infowerks.com","","Produciton does not know the intent of this machine, the DB's on here are ancient and there are only 2 with projects numbers. The other two are arbitary DBs"
+"ilas1wagslinux01","PoweredOn","192.168.199.6","8","16","ilas1wagslinux01","192.168.199.95,fe80::250:56ff:fe94:602c",
+"iwnv-w-wks-barry-2","PoweredOff","192.168.101.6","2","4","ILAS1WKS17.infowerks.com","","barry to review and remove. Then we will deactivate"
+"iwnv-w-wks-deb","PoweredOn","192.168.101.216","1","2","ILAS1DRN12.infowerks.com","192.168.101.122",
+"iwnv-w-fs02","PoweredOn","192.168.101.6","2","4","ilas1fs02.infowerks.com","192.168.101.15",
+"ilas1wagsVM1.199.88","PoweredOn","192.168.199.6","4","16","ilas1wagsvm1","192.168.199.30,fe80::250:56ff:fe94:595",
+"iwnv-w-fs01","PoweredOn","192.168.101.6","2","4","ilas1fs01.infowerks.com","192.168.101.32",
+"ilas1dev04.pa","PoweredOff","192.168.101.26","2","2","ILAS1DEV04.infowerks.com","","debs old QA machine that she lost access to when the C drive filled up... she was given a new PC and hasnt used this since 2023"
+"iwnv-w-sql-04","PoweredOn","192.168.101.225","4","6","ilas1sql04.infowerks.com","192.168.101.88",
+"ilas0sql02.101.60","PoweredOff","192.168.101.6","4","4","ilas1sql02.infowerks.com","","replaced by sql02a"
+"SFTP and NOTEZ","PoweredOff","192.168.101.216","2","4","isftp1.infowerks.com","",

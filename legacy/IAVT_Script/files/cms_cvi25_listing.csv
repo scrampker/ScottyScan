@@ -1,0 +1,173 @@
+﻿Name,IP Address,Data Classification,Type / User,Purpose,DNS Name,PowerStatus_CVI_25
+ilas1wagswks01.100.100,192.168.100.100,Cutomer Confidential Internal,,,,Powered On
+ilas1syn04.100.109,192.168.100.109,Cutomer Confidential Internal,Images,Vendor Dev,ilas1syn04.infowerks.com,Not Found
+ilas1syn05.100.110,192.168.100.110,Cutomer Confidential Internal,Images,Vendor Dev,ilas1syn05.infowerks.com,Not Found
+ilas3wks40.100.118,192.168.100.118,Customer Confidential External,,Production iRun,ILAS3WKS40.infowerks.com,Powered On
+ilas3wks47.100.134,192.168.100.134,Cutomer Confidential Internal,,iAggregate/automation,ilas3wks47.infowerks.com,Not Found
+ilas3wks48.100.135,192.168.100.135,Cutomer Confidential Internal,,iAggregate/automation,ilas3wks48.infowerks.com,Not Found
+ilas3wks49.100.136,192.168.100.136,Cutomer Confidential Internal,Rachel,Production iRun,ilas3wks49.infowerks.com,Powered On
+ilas3wks54.100.143,192.168.100.143,Cutomer Confidential Internal,,Production iRun,ILAS3WKS54.infowerks.com,Powered On
+ilas3wks55.100.144,192.168.100.144,Cutomer Confidential Internal,,Production iRun,ILAS3WKS55.infowerks.com,Powered On
+ilas3wks56.100.145,192.168.100.145,Cutomer Confidential Internal,,Production iRun,ILAS3WKS56.infowerks.com,Powered On
+ilas1vend01.100.150,192.168.100.150,Cutomer Confidential Internal,,,ilas1vend01.infowerks.com,Powered On
+ilas3wks78.100.157,192.168.100.157,Cutomer Confidential Internal,,Judd,ILAS3WKS78.infowerks.com,Powered On
+ilas3wks79.100.158,192.168.100.158,Cutomer Confidential Internal,,Shaun,ILAS3WKS79.infowerks.com,Powered Off
+ilas3wks81.100.59,192.168.100.159,Cutomer Confidential Internal,,Andy Dev,ILAS3WKS81.infowerks.com,Not Found
+ilas3wks82.100.160,192.168.100.160,Cutomer Confidential Internal,,Production iRun,ILAS3WKS82.infowerks.com,Powered On
+ilas3wks86.100.161,192.168.100.161,Cutomer Confidential Internal,,,ILAS3WKS86.infowerks.com,Not Found
+ilas1win1001.100.163,192.168.100.163,Cutomer Confidential Internal,,,ilas1win1001.infowerks.com,Powered On
+ilas1win1002.100.164,192.168.100.164,Cutomer Confidential Internal,,,ilas1win1002.infowerks.com,Powered On
+ilas1win1003.100.165,192.168.100.165,Cutomer Confidential Internal,,,ilas1win1003.infowerks.com,Powered On
+ilas1win1005.100.167,192.168.100.167,Cutomer Confidential Internal,,,ilas1win1005.infowerks.com,Powered Off
+ilas3wks87.100.170,192.168.100.170,Cutomer Confidential Internal,,Jon,ILAS3WKS87.infowerks.com,Not Found
+ilas3wks88.100.171,192.168.100.171,Cutomer Confidential Internal,,Stephen,ILAS3WKS88.infowerks.com,Powered On
+ilas3wks90,192.168.100.175,Cutomer Confidential Internal,User,Basil,ilas3wks90.infowerks.com,Not Found
+ilas3smtp01.101.12,192.168.100.18,Cutomer Confidential Internal,,,ilas3smtp01.infowerks.com,Powered On
+ilas3wks91.100.180,192.168.100.180,Customer Confidential External,,Production iRun,ILAS3WKS91.infowerks.com,Powered On
+ilas3wks92.100.181,192.168.100.181,Customer Confidential External,,Production iRun,ILAS3WKS92.infowerks.com,Powered On
+ilas3wks93.100.182,192.168.100.182,Customer Confidential External,,Production iRun,ILAS3WKS93.infowerks.com,Powered On
+ilas3wks94.100.183,192.168.100.183,Customer Confidential External,,Production iRun,ILAS3WKS94.infowerks.com,Powered On
+ilas3wks95.100.184,192.168.100.184,Cutomer Confidential Internal,,Ken Dev,ILAS3WKS95.infowerks.com,Powered On
+ilas3wks96.100.185,192.168.100.185,Cutomer Confidential Internal,,Ken Dev,ILAS3WKS95.infowerks.com,Powered On
+ilas3wks97.100.186,192.168.100.186,Cutomer Confidential Internal,,,,Powered On
+ilas3irun21.100.191,192.168.100.191,Cutomer Confidential Internal,Vendor,,ILAS3IRUN21.infowerks.com,Powered On
+ilas3irun24.100.193,192.168.100.193,Cutomer Confidential Internal,,Vendor Dev,ILAS3IRUN24.infowerks.com,Not Found
+ilas3db05.100.200,192.168.100.200,Cutomer Confidential Internal,,Production MSSQL,ilas3db05.infowerks.com,Not Found
+ilas4sql01.100.28,192.168.100.28,Cutomer Confidential Internal,,,,Powered Off
+ilas3irun08.100.38,192.168.100.38,Cutomer Confidential Internal,Barry,Image Dev,ILAS3IRUN08.infowerks.com,Powered On
+ilas1qa03.100.39,192.168.100.39,Cutomer Confidential Internal,,Kelly,ILAS1QA03.infowerks.com,Powered On
+ilas3irun01.100.40,192.168.100.40,Cutomer Confidential Internal,Stepen,Development,ILAS3IRUN01.infowerks.com,Powered Off
+ilas3irun02.100.41,192.168.100.41,Cutomer Confidential Internal,Andy,Development,ILAS3IRUN02.infowerks.com,Powered On
+ilas3irun03.100.42,192.168.100.42,Cutomer Confidential Internal,Andy,Development,ILAS3IRUN03.infowerks.com,Not Found
+ilas2wks27.100.54,192.168.100.54,Cutomer Confidential Internal,PM,Lisa P,ILAS2WKS27.infowerks.com,Powered On
+ilas3irun09.100.58,192.168.100.58,Cutomer Confidential Internal,,Development,ilas3irun09.infowerks.com,Powered On
+ilas3irun10.100.59,192.168.100.59,Cutomer Confidential Internal,,Jon,ILAS3IRUN10.infowerks.com,Not Found
+ilas3wks42.100.61,192.168.100.61,Cutomer Confidential Internal,,,,Not Found
+ilas2img07.100.63,192.168.100.63,Cutomer Confidential Internal,,,ILAS2IMG07.infowerks.com,Powered On
+ilas1syn01.100.65,192.168.100.65,Cutomer Confidential Internal,Images,Vendor Dev,ILAS1SYN01.infowerks.com,Powered On
+ilas3irun17.100.69,192.168.100.69,Cutomer Confidential Internal,?,,ILAS3IRUN17.infowerks.com,Not Found
+ilas3wks26 100.73,192.168.100.73,Cutomer Confidential Internal,,,ILAS3WKS26.infowerks.com,Powered On
+ilas3irun16.100.74,192.168.100.74,Cutomer Confidential Internal,,Development,ILAS3IRUN16.infowerks.com,Not Found
+ilas3db01 100.75,192.168.100.75,Cutomer Confidential Internal,,,ILAS3DB01.infowerks.com,Powered On
+ilas3irun12.100.89,192.168.100.89,Cutomer Confidential Internal,,Development,ILAS3IRUN12.infowerks.com,Powered Off
+ilas3irun14.100.91,192.168.100.91,Cutomer Confidential Internal,,Development,ILAS3IRUN14.infowerks.com,Powered On
+ilas3db04.100.99,192.168.100.99,Cutomer Confidential Internal,,Production MSSQL,ilas3db04.infowerks.com,Powered On
+openmanage_enterprise,192.168.101.101,Cutomer Confidential Internal,,,localhost.localdomain,Not Found
+ILAS2DB11_NEWACME,192.168.101.102,Cutomer Confidential Internal,,,ilas2db11.infowerks.com,Not Found
+ilas1sql05.SQL2012_2,192.168.101.103,Cutomer Confidential Internal,,,ilas1sql05.infowerks.com,Powered On
+ilas1dc01.101.111,192.168.101.111,Customer Confidential External,,Domain Controller,ilas1dc01.infowerks.com,Not Found
+Cage DC2,192.168.101.112,Customer Confidential External,,Domain Controller,icage0dc02.infowerks.com,Not Found
+ilas1pg02.101.118,192.168.101.118,Cutomer Confidential Internal,,,,Not Found
+ilas2pg02.101.118,192.168.101.118,Cutomer Confidential Internal,,,,Not Found
+ilas3wks70.101.121,192.168.101.121,Cutomer Confidential Internal,,Production iRun,ilas3wks70.infowerks.com,Powered On
+iRundata122,192.168.101.122,Cutomer Confidential Internal,QA,Deb,ILAS1DRN12.infowerks.com,Not Found
+ilas3wks71.101.123,192.168.101.123,Cutomer Confidential Internal,,Production iRun,ilas3wks71.infowerks.com,Powered On
+ilas3wks72.101.124,192.168.101.124,Cutomer Confidential Internal,,Production iRun,ilas3wks72.infowerks.com,Powered On
+ilas3wks73.101.125,192.168.101.125,Cutomer Confidential Internal,,Production iRun,ilas3wks73.infowerks.com,Powered On
+ilas3wks74.101.126,192.168.101.126,Cutomer Confidential Internal,,Production iRun,ilas3wks74.infowerks.com,Powered On
+ilas3wks75.101.127,192.168.101.127,Cutomer Confidential Internal,,Production iRun,ilas3wks75.infowerks.com,Powered On
+ilas1dc03.DomainController,192.168.101.14,Customer Confidential External,IT,Domain Controller,ILAS1DC03.infowerks.com,Not Found
+ilas1wks08.Teamvwr,192.168.101.140,Cutomer Confidential Internal,,,ILAS1WKS08.infowerks.com,Powered On
+ilas1wks09.teamvwr2,192.168.101.141,Cutomer Confidential Internal,Mike,Production iRun,ILAS1WKS09.infowerks.com,Powered On
+ilas2as02.CVSAPP101.43,192.168.101.143,Customer Confidential External,ViewMaster,CVS VM App,ilas2as02,Not Found
+ilas2db02.CVSDB_101.144,192.168.101.144,Customer Confidential External,ViewMaster,CVS VM DB,ilas2db02,Not Found
+ilas1pg03.101.146,192.168.101.146,Customer Confidential External,,,ilas1pg03,Powered On
+ilas1pg15.101.149,192.168.101.149,Cutomer Confidential Internal,,,ilas1pg15,Powered On
+ilas1fs02.101.15,192.168.101.15,Customer Confidential External,,Current,ilas1fs02.infowerks.com,Powered On
+ilas3irun15.100.92,192.168.101.152,Cutomer Confidential Internal,,Development,ILAS3IRUN15.infowerks.com,Not Found
+ilas3wks46.101.154,192.168.101.154,Customer Confidential External,,iAggregate/automation,ilas3wks46.infowerks.com,Powered On
+ilas0db44Cedar.101.56,192.168.101.156,Customer Confidential External,ViewMaster,Cedars VM DB,ilas0db44,Not Found
+ils0is02Cedar.101.57,192.168.101.157,Customer Confidential External,ViewMaster,Cedars VM App,ilas0is02,Not Found
+ilas0fs10.101.16,192.168.101.16,Cutomer Confidential Internal,,,ilas0fs10.infowerks.com,Not Found
+ilas3vmapp40.101.160,192.168.101.160,Customer Confidential External,ViewMaster,Walmart1 VM App,ilas3vmapp40,Powered On
+ilas3walmrtVM.101.165,192.168.101.165,Customer Confidential External,ViewMaster,Spartan/WM2 VM App,ilas33walvm3,Powered On
+ilas3walmtVM02.101.166,192.168.101.166,Customer Confidential External,ViewMaster,Walmart3 VM App,ilaswlmtvm02,Powered On
+ilas1arch01.101.168,192.168.101.168,Customer Confidential External,ViewMaster,Archive VM DB,ilas1arch01,Not Found
+iSQL1,192.168.101.175,Cutomer Confidential Internal,,,iSQL1.infowerks.com,Powered On
+ilas2wks20.basil,192.168.101.176,Cutomer Confidential Internal,,,ilas2wks20.infowerks.com,Powered On
+ILAS3DB142,192.168.101.180,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ILAS3DB161 ,192.168.101.181,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ilas3irun04.100.43,192.168.101.183,Cutomer Confidential Internal,Images,Dan,ILAS3IRUN04.infowerks.com,Powered On
+ILAS3DB140 ,192.168.101.184,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ILAS3DB154,192.168.101.186,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ilas1linux03.101.57,192.168.101.189,Cutomer Confidential Internal,,,ilaslinux03,Powered On
+ilas1sql10,192.168.101.190,Cutomer Confidential Internal,,,ilas1sql10.infowerks.com,Powered On
+ILAS2PG01,192.168.101.191,Cutomer Confidential Internal,Images,Dev Images,,Not Found
+ILAS3DB160,192.168.101.192,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ILAS3DB162 ,192.168.101.193,Cutomer Confidential Internal,Images,*,,Not Found
+ilas1win1004.100.166,192.168.101.194,Cutomer Confidential Internal,Images,Dev Images - Dan,ilas1win1004.infowerks.com,Powered On
+ILAS3DB155,192.168.101.195,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ILAS3DB153 ,192.168.101.196,Cutomer Confidential Internal,Images,Production Images,,Not Found
+ilas2img20.100.126,192.168.101.197,Cutomer Confidential Internal,Images,Production Images,ILAS2IMG20.infowerks.com,Powered On
+ilas2img16.100.122,192.168.101.198,Cutomer Confidential Internal,Images,Production Images,ILAS2IMG16.infowerks.com,Powered On
+ilas2img19.100.125,192.168.101.199,Cutomer Confidential Internal,Images,Production Images,ILAS2IMG19.infowerks.com,Powered On
+ilas4db01.101.20,192.168.101.20,Customer Confidential External,,Production Postgres,ilas4db01,Powered On
+ilas1as10.VMDemo,192.168.101.207,Cutomer Confidential Internal,,,,Not Found
+ilas1dev10.101.21,192.168.101.21,Cutomer Confidential Internal,,Development,ilas1dev10.infowerks.com,Powered On
+ilas3wks22 100.52,192.168.101.210,Cutomer Confidential Internal,,BCC,ILAS3WKS22-0.infowerks.com,Not Found
+ilas3wks32.100.94,192.168.101.211,Cutomer Confidential Internal,,Viki,ILAS3WKS32.infowerks.com,Powered On
+ilas2img15.100.121,192.168.101.232,Cutomer Confidential Internal,Images,Production Images,ILAS2IMG15.infowerks.com,Powered On
+ilas3wks36.101.240,192.168.101.240,Customer Confidential External,,Production iRun,ilas3wks36.101.240,Powered On
+ilas3wks36.101.241,192.168.101.241,Customer Confidential External,,Production iRun,ilas3wks36.101.240,Not Found
+ilas4db02.101.242,192.168.101.242,Customer Confidential External,,Production Postgres,ilas4db02,Powered On
+ilas1sql11.101.28,192.168.101.28,Cutomer Confidential Internal,,,ilas1sql11.infowerks.com,Powered On
+ilas1as23.iaggregate2,192.168.101.29,Cutomer Confidential Internal,,,ilas1as23,Not Found
+ilas3irun30.101.30,192.168.101.30,Cutomer Confidential Internal,Images,Vendor Dev,ilas3irun3.infowerks.com,Powered On
+ilas1vmas01.101.31,192.168.101.31,Cutomer Confidential Internal,,,ilas1vmas01,Not Found
+ilas1fs01,192.168.101.32,Customer Confidential External,,G Drive,ilas1fs01.infowerks.com,Powered On
+ilas1as12.NewBasement,192.168.101.33,Cutomer Confidential Internal,,,,Not Found
+ilas3irun34.101.34,192.168.101.34,Cutomer Confidential Internal,Images,Vendor Dev,ilas3irun34.infowerks.com,Not Found
+ilas1ubu01.101.35,192.168.101.35,Cutomer Confidential Internal,,,ilas1ubu01,Powered On
+ilas1ubu02.101.36,192.168.101.36,Cutomer Confidential Internal,,,ilas1ubu02,Powered On
+ilas1ubu03.101.37,192.168.101.37,Cutomer Confidential Internal,,,ilas1ubu03,Powered On
+ilas1as28.101.38,192.168.101.38,Cutomer Confidential Internal,,,ilas1as28,Powered Off
+ilas1test01.101.41,192.168.101.41,Cutomer Confidential Internal,,,ilas1dev19.infowerks.com,Not Found
+ilas2as02.iHBS3,192.168.101.48,Cutomer Confidential Internal,,,ilas2as02.infowerks.com,Powered On
+ilas3irun05.100.44,192.168.101.49,Cutomer Confidential Internal,Ken,,ILAS3IRUN05.infowerks.com,Powered Off
+ilas1linux02.101.50,192.168.101.50,Cutomer Confidential Internal,,,ilas1linux02,Not Found
+ilas1as24.101.51,192.168.101.51,Cutomer Confidential Internal,,,ilas1as24,Powered On
+ilas1as25.101.52,192.168.101.52,Cutomer Confidential Internal,,,ilas1as25,Not Found
+ilas1as29.101.53,192.168.101.53,Cutomer Confidential Internal,,,ilas1as29,Powered On
+ilas1pg01.101.56,192.168.101.56,Cutomer Confidential Internal,,,ilas1pg01,Powered Off
+ilas3sql04.postgres,192.168.101.57,Cutomer Confidential Internal,,,ilas3sql04,Not Found
+ilas0sql02.101.60,192.168.101.60,Cutomer Confidential Internal,,,ilas1sql02.infowerks.com,Powered On
+ilas1img01.imagestoreWG,192.168.101.63,Customer Confidential External,,,ilas1img01.infowerks.com,Powered On
+ilas3linux01 101.72,192.168.101.65,Cutomer Confidential Internal,,,ilas3linux01,Powered On
+ilas0sql02a.101.66,192.168.101.66,Cutomer Confidential Internal,,,ilas0sql02a.infowerks.com,Powered On
+ilas1wkstest01.101.67,192.168.101.67,Cutomer Confidential Internal,,,ilas1wkstest01.infowerks.com,Powered On
+ilas1wkstest02.101.68,192.168.101.68,Cutomer Confidential Internal,Images,Vendor Dev,ilas1wkstest02.infowerks.com,Not Found
+ilas1wkstest03.101.70,192.168.101.70,Cutomer Confidential Internal,,,ilas1wkstest03.infowerks.com,Powered On
+ilas1wkstest04.101.71,192.168.101.71,Cutomer Confidential Internal,Images,Vendor Dev,ilas1wkstest04.infowerks.com,Powered On
+ilas1wkstest05.101.72,192.168.101.72,Cutomer Confidential Internal,Images,Vendor Dev,ilas1wkstest05.infowerks.com,Not Found
+ilas1wks17.Barry,192.168.101.75,Cutomer Confidential Internal,,,ILAS1WKS17.infowerks.com,Powered On
+ilas1dev04.pa,192.168.101.76,Cutomer Confidential Internal,,QA,ILAS1DEV04.infowerks.com,Powered On
+ilas1dev12.andrew,192.168.101.81,Cutomer Confidential Internal,Andy,Development,ILAS1DEV12.infowerks.com,Powered Off
+Ilas3wks85.101.85,192.168.101.85,Cutomer Confidential Internal,,,ILAS3WKS85.infowerks.com,Powered On
+ilas1sql04.SQL2012,192.168.101.88,Cutomer Confidential Internal,,,ilas1sql04.infowerks.com,Powered On
+ilas1as11.Spartan1,192.168.101.89,Customer Confidential External,,,,Not Found
+ilas1dc04.101.9,192.168.101.9,Customer Confidential External,,Domain Controller,ilas1dc04.infowerks.com,Not Found
+ilas1fed01.101.91,192.168.101.91,Customer Confidential External,,,ilas1fed01.localdomain,Powered On
+ilas3pg10.postgres,192.168.101.93,Cutomer Confidential Internal,,,ilas3pg10,Not Found
+ilas1as06.AhsaySort,192.168.101.94,Customer Confidential External,,,,Not Found
+ilas1web06.dashboard.infowerks.com,192.168.101.94,Cutomer Confidential Internal,,,ilas1web06,Powered Off
+ilas1web09.101.96,192.168.101.96,Cutomer Confidential Internal,,,ilas1web09,Powered Off
+ilas1web09.restore,192.168.101.97,Cutomer Confidential Internal,,,,Not Found
+ilas1ftp01.isftp2,192.168.101.98,Cutomer Confidential Internal,,,,Not Found
+SFTP and NOTEZ,192.168.101.99,Cutomer Confidential Internal,,,isftp1.infowerks.com,Powered Off
+ilas1wagsftp01.WalgreensFTPServer,192.168.199.22,Customer Confidential External,,,ilas1wagsftp01,Powered On
+ilas1wagsVM1.199.88,192.168.199.30,Customer Confidential External,,,ilas1wagsvm1,Not Found
+ilas1wagsvm3.vm35199.31,192.168.199.31,Customer Confidential External,,,,Powered On
+ilas1wagsimg01,192.168.199.40,Customer Confidential External,,,ILAS1WAGSIMG01.infowerks.com,Not Found
+ilas1PGDB02a.SECPGDA,192.168.199.71,Customer Confidential External,,,ilas1PGDB02a,Not Found
+ilas1PGDB02b.SECPGDB,192.168.199.72,Customer Confidential External,,,ilas1pgdb02b,Not Found
+ilas1wagsfe01.199.74,192.168.199.74,Customer Confidential External,,,ilas1wagsfe01,Not Found
+ilas1wagsas01.199.75,192.168.199.75,Customer Confidential External,,,ilas1wagsas01,Not Found
+ilas1wagsas02.199.76,192.168.199.76,Customer Confidential External,,,ilas1wagsas02,Not Found
+ilas1wagsfe02.199.78,192.168.199.78,Customer Confidential External,,,ilas1wagsfe02,Not Found
+ilas1wagsdb03.199.79,192.168.199.79,Customer Confidential External,,,ilas1wagsdb03,Powered On
+ilas1wagsas03.199.89,192.168.199.89,Customer Confidential External,,,ilas1wagsas03,Not Found
+ilas1as27.101.151,,Cutomer Confidential Internal,,,ilas1as27,Not Found
+ilas1wagftp02.linux,,Customer Confidential External,,,,Powered On
+ilas1wagsdb02.db2.199.30,192.168.199.30,Customer Confidential External,,,ilas1wagsdb02,Powered On
+ilas2vm06,,Customer Confidential External,,,,Not Found
+ilas2vm1gen01.vmsite2,,Cutomer Confidential Internal,,,,Not Found
